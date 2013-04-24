@@ -125,6 +125,7 @@ struct imx_i2c_struct {
 	int			stopped;
 	unsigned int		ifdr; /* IMX_I2C_IFDR */
 	unsigned int		cur_clk;
+	unsigned int		suspended:1;
 };
 
 static void i2c_imx_stop(struct imx_i2c_struct *i2c_imx);
@@ -493,6 +494,9 @@ static int i2c_imx_xfer(struct i2c_adapter *adapter,
 	int result;
 	struct imx_i2c_struct *i2c_imx = i2c_get_adapdata(adapter);
 
+	if (i2c_imx->suspended)
+		return -EBUSY;
+
 	dev_dbg(&i2c_imx->adapter.dev, "<%s>\n", __func__);
 
 	/* Start I2C transfer */
@@ -726,10 +730,42 @@ static int __exit i2c_imx_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_PM
+static int imx_i2c_suspend_noirq(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct imx_i2c_struct *i2c_imx = platform_get_drvdata(pdev);
+
+	i2c_imx->suspended = 1;
+
+	return 0;
+}
+
+static int imx_i2c_resume(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct imx_i2c_struct *i2c_imx = platform_get_drvdata(pdev);
+
+	i2c_imx->suspended = 0;
+
+	return 0;
+}
+
+static const struct dev_pm_ops imx_i2c_dev_pm_ops = {
+	.suspend_noirq = imx_i2c_suspend_noirq,
+	.resume = imx_i2c_resume,
+};
+
+#define IMX_DEV_PM_OPS (&imx_i2c_dev_pm_ops)
+#else
+#define IMX_DEV_PM_OPS NULL
+#endif
+
 static struct platform_driver i2c_imx_driver = {
 	.remove		= __exit_p(i2c_imx_remove),
 	.driver	= {
 		.name	= DRIVER_NAME,
+		.pm	= IMX_DEV_PM_OPS,
 		.owner	= THIS_MODULE,
 	}
 };
