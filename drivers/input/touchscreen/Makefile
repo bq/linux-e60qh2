@@ -68,6 +68,7 @@ obj-$(CONFIG_TOUCHSCREEN_NOVATEK)	+= novatek_ts.o
 obj-$(CONFIG_TOUCHSCREEN_EGALAX)	+= egalax_ts.o
 obj-$(CONFIG_TOUCHSCREEN_ELAN)		+= elan_ts.o
 obj-$(CONFIG_TOUCHSCREEN_ZFORCE)	+= zforce_i2c.o
+obj-$(CONFIG_TOUCHSCREEN_ZFORCE_NEW)	+= zforce_ts.o
 obj-$(CONFIG_TOUCHSCREEN_ELAN_TOUCH)	+= elan_touch_i2c.o
 obj-$(CONFIG_TOUCHSCREEN_WACOM_I2C)	+= wacom_i2c.o
 obj-$(CONFIG_TOUCHSCREEN_WALTOP_I2C)	+= waltop_i2c.o

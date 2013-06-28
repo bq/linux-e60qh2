@@ -795,6 +795,17 @@ config TOUCHSCREEN_ZFORCE
 
         If unsure, say N.
 
+config TOUCHSCREEN_ZFORCE_NEW
+	tristate "Neonode zForce IR touchscreen"
+	depends on I2C
+	help
+	  Say Y here if you have a zForce touchscreen controller
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called zforce-ts.
+
 config TOUCHSCREEN_ELAN_TOUCH
 	tristate "Elan Capacitive touchpad on PVI EPD"
 	help
