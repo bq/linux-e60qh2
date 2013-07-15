@@ -1052,7 +1052,7 @@ fb_blank(struct fb_info *info, int blank)
 }
 
 
-#define _FORCE_REPORT_4BIT	1
+//#define _FORCE_REPORT_4BIT	1
 
 #ifdef _FORCE_REPORT_4BIT //[
 #include "mxc/ntx_hwconfig.h"
