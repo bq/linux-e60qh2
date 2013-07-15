@@ -33,6 +33,7 @@
 #include <linux/spi/flash.h>
 #include <linux/i2c.h>
 #include <linux/i2c/pca953x.h>
+#include <linux/input/zforce_ts.h>
 #include <linux/ata.h>
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/map.h>
@@ -923,6 +924,13 @@ static struct imxi2c_platform_data mx6_ntx_i2c1_data = {
 
 static struct imxi2c_platform_data mx6_ntx_i2c2_data = {
 	.bitrate = 100000,
+};
+
+static struct zforce_ts_platdata zforce_ts_data = {
+	.x_max = 600,
+	.y_max = 800,
+//	.gpio_int = TOUCH_INT,
+//	.gpio_rst = IR_TOUCH_RST,
 };
 
 static struct i2c_board_info i2c_zforce_ir_touch_binfo = {
