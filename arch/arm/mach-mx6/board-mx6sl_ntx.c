@@ -934,8 +934,10 @@ static struct zforce_ts_platdata zforce_ts_data = {
 };
 
 static struct i2c_board_info i2c_zforce_ir_touch_binfo = {
-	.type = "zforce-ir-touch",
+//	.type = "zforce-ir-touch",
+	.type = "zforce-ts",
 	.addr = 0x50,
+	.platform_data = &zforce_ts_data,
  	//.platform_data = MX6SL_IR_TOUCH_INT,
  	//.irq = gpio_to_irq(MX6SL_IR_TOUCH_INT),
 };
@@ -3516,8 +3518,12 @@ static void ntx_gpio_init(void)
 		gpio_direction_output (GPIO_ISD_3V3_ON, giISD_3V3_ON_Ctrl?1:0);
 	}
 
- 	i2c_zforce_ir_touch_binfo.platform_data = gMX6SL_IR_TOUCH_INT;
- 	i2c_zforce_ir_touch_binfo.irq = gpio_to_irq(gMX6SL_IR_TOUCH_INT);
+
+// 	i2c_zforce_ir_touch_binfo.platform_data = gMX6SL_IR_TOUCH_INT;
+	i2c_zforce_ir_touch_binfo.irq = gpio_to_irq(gMX6SL_IR_TOUCH_INT);
+
+	zforce_ts_data.gpio_int = gMX6SL_IR_TOUCH_INT;
+	zforce_ts_data.gpio_rst = gMX6SL_IR_TOUCH_RST;
 
 	i2c_elan_touch_binfo.platform_data = gMX6SL_IR_TOUCH_INT;
  	i2c_elan_touch_binfo.irq = gpio_to_irq(gMX6SL_IR_TOUCH_INT);
@@ -3583,13 +3589,13 @@ static void ntx_gpio_init(void)
 	}
 	//#endif //]CONFIG_ANDROID
 	
-	gpio_request (gMX6SL_IR_TOUCH_INT, "MX6SL_IR_TOUCH_INT");
-	gpio_direction_input (gMX6SL_IR_TOUCH_INT);
+//	gpio_request (gMX6SL_IR_TOUCH_INT, "MX6SL_IR_TOUCH_INT");
+//	gpio_direction_input (gMX6SL_IR_TOUCH_INT);
 	
-	gpio_request (gMX6SL_IR_TOUCH_RST, "MX6SL_IR_TOUCH_RST");
-	gpio_direction_output (gMX6SL_IR_TOUCH_RST, 0);
-	mdelay (10);
-	gpio_direction_input (gMX6SL_IR_TOUCH_RST);
+//	gpio_request (gMX6SL_IR_TOUCH_RST, "MX6SL_IR_TOUCH_RST");
+//	gpio_direction_output (gMX6SL_IR_TOUCH_RST, 0);
+//	mdelay (10);
+//	gpio_direction_input (gMX6SL_IR_TOUCH_RST);
 	if(0==gptHWCFG->m_val.bHallSensor) {
 		gpio_request (gMX6SL_HALL_EN, "MX6SL_HALL_EN");
 		gpio_direction_input (gMX6SL_HALL_EN);
@@ -3671,6 +3677,24 @@ static void __init mx6_ntx_init(void)
 	}
 //	imx6q_add_imx_snvs_rtc();
 
+
+	if(1==gptHWCFG->m_val.bDisplayResolution) {
+		// 1024x758 .
+		zforce_ts_data.x_max = 758;
+		zforce_ts_data.y_max = 1024;
+	} else if(2==gptHWCFG->m_val.bDisplayResolution) {
+		// 1024x768
+		zforce_ts_data.x_max = 768;
+		zforce_ts_data.y_max = 1024;
+	} else if(3==gptHWCFG->m_val.bDisplayResolution) {
+		// 1440x1080
+		zforce_ts_data.x_max = 1080;
+		zforce_ts_data.y_max = 1440;
+	} else {
+		// 800x600 
+		zforce_ts_data.x_max = 600;
+		zforce_ts_data.y_max = 800;
+	}
 
 	imx6q_add_imx_i2c(0, &mx6_ntx_i2c0_data);
 	imx6q_add_imx_i2c(1, &mx6_ntx_i2c1_data);

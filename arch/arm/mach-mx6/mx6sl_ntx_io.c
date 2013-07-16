@@ -1196,6 +1196,10 @@ static int  ioctlDriver(struct file *filp, unsigned int command, unsigned long a
 			g_mxc_touch_triggered = 0;
       		break;	
 		case CM_POWER_KEY_RAW:
+/*			if ((6 == check_hardware_name()) || (2 == check_hardware_name())) 		// E60632 || E50602
+				i = (gpio_get_value (GPIO_PWR_SW))?1:0;	// POWER key
+			else
+				i = (gpio_get_value (GPIO_PWR_SW))?0:1;	// POWER key */
 			i = power_key_status();
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
       		break;
@@ -1864,9 +1868,9 @@ static int gpio_initials(void)
 #endif//]CONFIG_ANDROID
 
 	
-	gpio_direction_output(gMX6SL_IR_TOUCH_RST, 0);
+/*	gpio_direction_output(gMX6SL_IR_TOUCH_RST, 0);
 	msleep(20);
-	gpio_direction_input(gMX6SL_IR_TOUCH_RST);
+	gpio_direction_input(gMX6SL_IR_TOUCH_RST); */
 
 	// MX6SL_FL_EN
 	if( 0 != gptHWCFG->m_val.bFrontLight ){
@@ -2269,9 +2273,9 @@ void ntx_gpio_suspend (void)
 		if( 3==gptHWCFG->m_val.bTouchType ||
 		   (4==gptHWCFG->m_val.bTouchType && 0x03!=gptHWCFG->m_val.bUIConfig) ) {
 			// turn off touch power.
-			gpio_direction_output (gMX6SL_IR_TOUCH_INT, 0);
+//			gpio_direction_output (gMX6SL_IR_TOUCH_INT, 0);
  		
-			gpio_direction_output (gMX6SL_IR_TOUCH_RST, 0);
+//			gpio_direction_output (gMX6SL_IR_TOUCH_RST, 0);
 			if (1!=gptHWCFG->m_val.bPMIC)
 				gpio_direction_output (GPIO_IR_3V3_ON, 0);
 		}
@@ -2653,17 +2657,17 @@ void ntx_gpio_resume (void)
 		if(4==gptHWCFG->m_val.bTouchType && 0x03==gptHWCFG->m_val.bUIConfig) {
 			// IR Touch Type & MP/RD Mode for IR tool .
 			// reset ir touch
-			gpio_direction_output (gMX6SL_IR_TOUCH_RST, 0);
-			mdelay (20);
-			gpio_direction_output (gMX6SL_IR_TOUCH_RST, 1);
+//			gpio_direction_output (gMX6SL_IR_TOUCH_RST, 0);
+//			mdelay (20);
+//			gpio_direction_output (gMX6SL_IR_TOUCH_RST, 1);
 		}
 		else {
 			// turn on ir touch power.
 			if (1!=gptHWCFG->m_val.bPMIC)
 				gpio_direction_output (GPIO_IR_3V3_ON, 1);
-			gpio_direction_input (gMX6SL_IR_TOUCH_INT);
-			mdelay (20);
-			gpio_direction_output (gMX6SL_IR_TOUCH_RST, 1);
+//			gpio_direction_input (gMX6SL_IR_TOUCH_INT);
+//			mdelay (20);
+//			gpio_direction_output (gMX6SL_IR_TOUCH_RST, 1);
 		}
 		if(3==gptHWCFG->m_val.bTouch2Ctrl) {
 			// Waltop digitizer
@@ -2742,7 +2746,7 @@ void ntx_gpio_resume (void)
 
 
 #include <linux/regulator/consumer.h>
-void ntx_gpio_touch_reset (void)
+/*void ntx_gpio_touch_reset (void)
 {
 	struct regulator *reg_TP3V3 = NULL;
 	
@@ -2786,16 +2790,16 @@ void ntx_gpio_touch_reset (void)
 	gpio_direction_input (gMX6SL_IR_TOUCH_INT);
 	mdelay (20);
 	gpio_direction_output (gMX6SL_IR_TOUCH_RST, 1);
-}
+}*/
 
-void ntx_gpio_touch_easyreset (void)
+/*void ntx_gpio_touch_easyreset (void)
 {
 	
 	printk ("[%s-%d] pull touch reset pin.\n",__func__,__LINE__); 
 	gpio_direction_output(gMX6SL_IR_TOUCH_RST, 0);
 	mdelay (20);
 	gpio_direction_output (gMX6SL_IR_TOUCH_RST, 1);
-}
+}*/
 
 int ntx_i2c_recovery(int iI2C_Chn_Idx)
 {
