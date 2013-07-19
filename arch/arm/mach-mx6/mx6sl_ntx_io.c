@@ -1857,7 +1857,7 @@ static int gpio_initials(void)
 		{
 			/* Set power key as wakeup resource */
 			irq = gpio_to_irq(gMX6SL_PWR_SW);
-			ret = request_irq(irq, power_key_int, IRQF_TRIGGER_FALLING, "power_key", 0);
+			ret = request_irq(irq, power_key_int, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, "power_key", 0);
 			if (ret)
 				pr_info("register on-off key interrupt failed\n");
 			else
