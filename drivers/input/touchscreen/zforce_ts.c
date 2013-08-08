@@ -1,9 +1,9 @@
 /*
- * Copyright (C) 2012 MundoReader S.L.
+ * Copyright (C) 2012-2013 MundoReader S.L.
  * Author: Heiko Stuebner <heiko@sntech.de>
- * 
- * based on Nook zforce driver
- * 
+ *
+ * based in parts on Nook zforce driver
+ *
  * Copyright (C) 2010 Barnes & Noble, Inc.
  * Author: Pieter Truter<ptruter@intrinsyc.com>
  *
@@ -15,7 +15,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
  */
 
 #include <linux/module.h>
@@ -29,6 +28,7 @@
 #include <linux/device.h>
 #include <linux/sysfs.h>
 #include <linux/input/zforce_ts.h>
+#include <linux/input/mt.h>
 
 #define WAIT_TIMEOUT		msecs_to_jiffies(1000)
 
@@ -52,7 +52,8 @@
 #define COMMAND_SCANFREQ	0x08
 #define COMMAND_STATUS		0X1e
 
-/* Responses the controller sends as a result of
+/*
+ * Responses the controller sends as a result of
  * command requests
  */
 #define RESPONSE_DEACTIVATE	0x00
@@ -62,7 +63,8 @@
 #define RESPONSE_SCANFREQ	0x08
 #define RESPONSE_STATUS		0X1e
 
-/* Notifications are send by the touch controller without
+/*
+ * Notifications are send by the touch controller without
  * beeing requested by the driver and include for example
  * touch indications
  */
@@ -79,7 +81,7 @@
 #define STATE_MOVE			1
 #define STATE_UP			2
 
-#define SETCONFIG_DUALTOUCH (1 << 0)
+#define SETCONFIG_DUALTOUCH		(1 << 0)
 
 struct zforce_point {
 	int coord_x;
@@ -103,7 +105,8 @@ struct zforce_point {
  * @command_done	completion to wait for the command result
  * @command_mutex	serialize commands send to the ic
  * @command_waiting	the id of the command that that is currently waiting
- *			for a result 
+ *			for a result
+ * @command_result	returned result of the command
  */
 struct zforce_ts {
 	struct i2c_client	*client;
@@ -131,9 +134,6 @@ struct zforce_ts {
 	/* FIXME: not for upstream */
 	struct delayed_work	check;
 	struct delayed_work	reset;
-	int			last_x;
-	int			last_y;
-	unsigned long		last_jiffies;
 };
 
 static int zforce_command(struct zforce_ts *ts, u8 cmd)
@@ -169,8 +169,6 @@ static int zforce_send_wait(struct zforce_ts *ts, const char *buf, const int len
 		dev_err(&client->dev, "already waiting for a command\n");
 		return -EBUSY;
 	}
-
-//FIXME: sanity checks
 
 	dev_dbg(&client->dev, "sending %d bytes for command 0x%x\n", buf[1], buf[2]);
 
@@ -264,6 +262,7 @@ static int zforce_start(struct zforce_ts *ts)
 
 	dev_dbg(&client->dev, "starting device\n");
 
+	/* FIXME: not for upstream */
 	ts->stopped = false;
 
 	ret = zforce_command_wait(ts, COMMAND_INITIALIZE);
@@ -308,6 +307,7 @@ static int zforce_start(struct zforce_ts *ts)
 
 error:
 	zforce_command_wait(ts, COMMAND_DEACTIVATE);
+	/* FIXME: not for upstream */
 	ts->stopped = true;
 	return ret;
 }
@@ -330,6 +330,7 @@ static int zforce_stop(struct zforce_ts *ts)
 		return ret;
 	}
 
+	/* FIXME: not for upstream */
 	ts->stopped = true;
 
 	return 0;
@@ -357,6 +358,7 @@ static void zforce_check_work(struct work_struct *work)
 	schedule_delayed_work(&ts->check, HZ * 10);
 }
 
+/* FIXME: not for upstream */
 static void zforce_reset_work(struct work_struct *work)
 {
 	struct zforce_ts *ts = container_of(work, struct zforce_ts, reset.work);
@@ -416,33 +418,26 @@ static int zforce_touch_event(struct zforce_ts *ts, u8* payload)
 		point[i].area_major = max(payload[9 * i + 6], payload[9 * i + 7]);
 		point[i].area_minor = min(payload[9 * i + 6], payload[9 * i + 7]);
 		point[i].orientation = payload[9 * i + 6] > payload[9 * i + 7];
-		
+
 		point[i].pressure = payload[9 * i + 8];
 		point[i].prblty = payload[9 * i + 9];
 	}
 
-/* FIXME: not for upstream */
-	if (jiffies - ts->last_jiffies < HZ/10) { /* 100ms */
-		if (abs(point[0].coord_x - ts->last_x) > 250 || abs(point[0].coord_y - ts->last_y) > 250) {
-			pr_warn("ignoring jumpy touch (%d, %d)\n", point[0].coord_x, point[0].coord_y);
-			return 0;
-		}
-	}
-
 	for (i = 0; i < count; i++) {
-		dev_dbg(&client->dev, "touch-data for point %d of %d: state %d, id %d, pressure %d, probability %d\n",
+		dev_dbg(&client->dev, "point %d/%d: state %d, id %d, pressure %d, prblty %d, x %d, y %d, amajor %d, aminor %d, ori %d\n",
 			i, count, point[i].state, point[i].id,
-			point[i].pressure, point[i].prblty);
-		dev_dbg(&client->dev, "x %d, y %d, area-major %d, area_minor %d, orientation %d\n",
+			point[i].pressure, point[i].prblty,
 			point[i].coord_x, point[i].coord_y,
 			point[i].area_major, point[i].area_minor,
 			point[i].orientation);
 
-		/* FIXME: convert to multitouch protocol b when we switch to a
-		 * newer kernel, as the zforce supports tracking the contacts
-		 * in hardware.
-		 */
-		if (point[i].state == STATE_DOWN || point[i].state == STATE_MOVE) {
+		/* the zforce id starts with "1", so needs to be decreased */
+		input_mt_slot(ts->input, point[i].id - 1);
+
+		input_mt_report_slot_state(ts->input, MT_TOOL_FINGER,
+						point[i].state != STATE_UP);
+
+		if (point[i].state != STATE_UP) {
 			input_report_abs(ts->input, ABS_MT_POSITION_X,
 					 point[i].coord_x);
 			input_report_abs(ts->input, ABS_MT_POSITION_Y,
@@ -453,13 +448,14 @@ static int zforce_touch_event(struct zforce_ts *ts, u8* payload)
 					 point[i].area_minor);
 			input_report_abs(ts->input, ABS_MT_ORIENTATION,
 					 point[i].orientation);
-			input_mt_sync(ts->input);
 		}
 	}
 
 /*
-	input_report_abs(ts->input, ABS_X, point[0].coord_x);
-	input_report_abs(ts->input, ABS_Y, point[0].coord_y);
+	if (point[0].state != STATE_UP) {
+		input_report_abs(ts->input, ABS_X, point[0].coord_x);
+		input_report_abs(ts->input, ABS_Y, point[0].coord_y);
+	}
  * for some unknown reasion ntx swapped the correct coordinates from the
  * zforce-ic in their driver (x <-> y),
  * only to swap them back via the tslib pointercal :-S .
@@ -469,21 +465,13 @@ static int zforce_touch_event(struct zforce_ts *ts, u8* payload)
 	input_report_abs(ts->input, ABS_X, point[0].coord_y);
 	input_report_abs(ts->input, ABS_Y, pdata->x_max - point[0].coord_x);
 
-/* FIXME: not for upstream */
-	ts->last_x = point[0].coord_x;
-	ts->last_y = point[0].coord_y;
-	ts->last_jiffies = jiffies;
 
-	/* determine the button state */
-	if (point[0].state == STATE_DOWN || point[0].state == STATE_MOVE) {
-		input_report_abs(ts->input, ABS_PRESSURE, 1024); /* FIXME: not for upstream, but for old tslib versions */
-		input_report_key(ts->input, BTN_TOUCH, 1);
-	} else {
-		input_report_abs(ts->input, ABS_PRESSURE, 0); /* FIXME: not for upstream, but for old tslib versions */
-		input_report_key(ts->input, BTN_TOUCH, 0);
-	}
+	input_report_key(ts->input, BTN_TOUCH, point[0].state != STATE_UP);
+
+	/* FIXME: not for upstream, but for old tslib versions */
+	input_report_abs(ts->input, ABS_PRESSURE, point[0].state != STATE_UP ? 1024 : 0);
+
 	input_sync(ts->input);
-
 
 	return 0;
 }
@@ -660,9 +648,6 @@ static void zforce_input_close(struct input_dev *dev)
 	struct i2c_client *client = ts->client;
 	int ret;
 
-	/* need to disable the irq even if stop failed, to prevent
-	 * enable/disable mismatches
-	 */
 	ret = zforce_stop(ts);
 	if (ret)
 		dev_warn(&client->dev, "stopping zforce failed\n");
@@ -670,6 +655,7 @@ static void zforce_input_close(struct input_dev *dev)
 	return;
 }
 
+#ifdef CONFIG_PM_SLEEP
 static int zforce_suspend(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
@@ -758,6 +744,8 @@ static int zforce_resume(struct device *dev)
 		enable_irq(client->irq);
 
 		ret = zforce_start(ts);
+		if (ret < 0)
+			goto unlock;
 	}
 
 	/* FIXME: not for upstream
@@ -772,6 +760,7 @@ unlock:
 
 	return ret;
 }
+#endif
 
 static SIMPLE_DEV_PM_OPS(zforce_pm_ops, zforce_suspend, zforce_resume);
 
@@ -829,11 +818,10 @@ static int zforce_probe(struct i2c_client *client,
 	input_dev->open = zforce_input_open;
 	input_dev->close = zforce_input_close;
 
-	__set_bit(EV_KEY, input_dev->evbit);
-	__set_bit(EV_SYN, input_dev->evbit);
-	__set_bit(EV_ABS, input_dev->evbit);
-
-	__set_bit(BTN_TOUCH, input_dev->keybit);
+	set_bit(EV_KEY, input_dev->evbit);
+	set_bit(EV_SYN, input_dev->evbit);
+	set_bit(EV_ABS, input_dev->evbit);
+	set_bit(BTN_TOUCH, input_dev->keybit);
 
 	/* For single touch */
 	input_set_abs_params(input_dev, ABS_X, 0, pdata->x_max, 0, 0);
@@ -843,6 +831,7 @@ static int zforce_probe(struct i2c_client *client,
 	input_set_abs_params(input_dev, ABS_PRESSURE, 0, 1048, 0, 0);
 
 	/* For multi touch */
+	input_mt_init_slots(input_dev, ZFORCE_REPORT_POINTS);
 	input_set_abs_params(input_dev, ABS_MT_POSITION_X, 0,
 			     pdata->x_max, 0, 0);
 	input_set_abs_params(input_dev, ABS_MT_POSITION_Y, 0,
@@ -855,6 +844,8 @@ static int zforce_probe(struct i2c_client *client,
 	input_set_abs_params(input_dev, ABS_MT_ORIENTATION, 0, 1, 0, 0);
 
 	input_set_drvdata(ts->input, ts);
+
+	/* FIXME: not for upstream */
 	ts->stopped = true;
 
 	init_completion(&ts->command_done);
@@ -866,8 +857,8 @@ static int zforce_probe(struct i2c_client *client,
 	/* The zforce pulls the interrupt low when it has data ready.
 	 * After it is triggered the isr thread runs until all the available
 	 * packets have been read and the interrupt is high again.
-	 * Therefore we can trigger the interrupt anytime it is low and do not need
-	 * to limit it to the interrupt edge.
+	 * Therefore we can trigger the interrupt anytime it is low and do
+	 * not need to limit it to the interrupt edge.
 	 */
 	ret = request_threaded_irq(client->irq, NULL, zforce_interrupt,
 				   IRQF_TRIGGER_LOW | IRQF_ONESHOT,
@@ -889,14 +880,14 @@ static int zforce_probe(struct i2c_client *client,
 	/* need to start device to get version information */
 	ret = zforce_command_wait(ts, COMMAND_INITIALIZE);
 	if (ret) {
-		dev_err(&client->dev, "Unable to initialize, %d\n", ret);
+		dev_err(&client->dev, "unable to initialize, %d\n", ret);
 		goto err_input_register;
 	}
 
 	/* this gets the firmware version among other informations */
 	ret = zforce_command_wait(ts, COMMAND_STATUS);
 	if (ret < 0) {
-		dev_err(&client->dev, "could not get device status, %d\n", ret);
+		dev_err(&client->dev, "couldn't get status, %d\n", ret);
 		zforce_stop(ts);
 		goto err_input_register;
 	}
@@ -910,7 +901,8 @@ static int zforce_probe(struct i2c_client *client,
 
 	ret = input_register_device(input_dev);
 	if (ret) {
-		dev_err(&client->dev, "could not register input device, %d\n", ret);
+		dev_err(&client->dev, "could not register input device, %d\n",
+			ret);
 		goto err_input_register;
 	}
 
@@ -944,7 +936,6 @@ static struct i2c_device_id zforce_idtable[] = {
 	{ "zforce-ts", 0 },
 	{ }
 };
-
 MODULE_DEVICE_TABLE(i2c, zforce_idtable);
 
 static struct i2c_driver zforce_driver = {
@@ -962,16 +953,14 @@ static int __init zforce_init(void)
 {
 	return i2c_add_driver(&zforce_driver);
 }
+module_init(zforce_init);
 
 static void __exit zforce_exit(void)
 {
 	i2c_del_driver(&zforce_driver);
 }
-
-module_init(zforce_init);
 module_exit(zforce_exit);
 
 MODULE_AUTHOR("Heiko Stuebner <heiko@sntech.de>");
 MODULE_DESCRIPTION("zForce TouchScreen Driver");
 MODULE_LICENSE("GPL");
-
