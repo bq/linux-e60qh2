@@ -4453,9 +4453,15 @@ int mxc_epdc_fb_send_update(struct mxcfb_update_data *upd_data,
 
 	GALLEN_DBGLOCAL_BEGIN();
 
+/*
+ * This change slows down consecutive screen updates a lot, as the next
+ * screen update first waits for the last one to finish.
+ * As this "feature" was not part of the imx5 variant of the driver,
+ * remove it again.
 	//Yian: patch from freescale HK. Peter, fixed the line noise on EPD
 	flush_cache_all();
 	outer_flush_all();
+*/
 
 	if (!fb_data->restrict_width) {
 		GALLEN_DBGLOCAL_ESC();
@@ -7283,7 +7289,7 @@ int __devinit mxc_epdc_fb_probe(struct platform_device *pdev)
 #ifdef CONFIG_ANDROID//[
 	fb_data->pwrdown_delay = 20;
 #else //][!CONFIG_ANDROID
-	fb_data->pwrdown_delay = 20;
+	fb_data->pwrdown_delay = 500;
 #endif //] CONFIG_ANDROID
 
 #if 0
