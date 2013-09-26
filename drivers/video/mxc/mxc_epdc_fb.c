@@ -2492,6 +2492,10 @@ int mxc_epdc_fb_set_upd_scheme(u32 upd_scheme, struct fb_info *info)
 
 	GALLEN_DBGLOCAL_BEGIN();
 
+	/* If already set, nothing to do */
+	if (fb_data->upd_scheme == upd_scheme)
+		return 0;
+
 	dev_dbg(fb_data->dev, "Setting optimization level to %d\n", upd_scheme);
 
 	/*
