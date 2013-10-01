@@ -773,6 +773,8 @@ static irqreturn_t cd_irq(int irq, void *data)
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(sdhost);
 	struct pltfm_imx_data *imx_data = pltfm_host->priv;
 
+	pm_wakeup_event(sdhost->mmc->parent, 2000);
+
 	writel(0, sdhost->ioaddr + SDHCI_MIX_CTRL);
 	writel(0, sdhost->ioaddr + SDHCI_TUNE_CTRL_STATUS);
 
