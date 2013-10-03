@@ -2226,6 +2226,8 @@ void ricoh_suspend_state_sync(void)
 //#define DUMP_PADS	1
 extern int mxc_epdc_fb_ep1v8_output(int iIsOutput);
 
+static void __iomem *reg_uart1;
+
 void ntx_gpio_suspend (void)
 {
 	g_wakeup_by_alarm = 0;
@@ -2291,8 +2293,8 @@ void ntx_gpio_suspend (void)
 
 	}
 
-	gUart_ucr1 = __raw_readl(ioremap(MX6SL_UART1_BASE_ADDR, SZ_4K)+0x80);
-	__raw_writel(0, ioremap(MX6SL_UART1_BASE_ADDR, SZ_4K)+0x80);
+	gUart_ucr1 = __raw_readl(reg_uart1 + 0x80);
+	__raw_writel(0, reg_uart1 + 0x80);
 
 	if (gSleep_Mode_Suspend) {
 	    iomux_v3_cfg_t *p = local_suspend_enter_pads;
@@ -2638,7 +2640,8 @@ void ntx_gpio_resume (void)
 #endif//] DUMP_PADS
 
 	}
-	__raw_writel(gUart_ucr1, ioremap(MX6SL_UART1_BASE_ADDR, SZ_4K)+0x80);
+	__raw_writel(gUart_ucr1, reg_uart1 + 0x80);
+
 	if (gSleep_Mode_Suspend) {
 
 		if(-1!=giISD_3V3_ON_Ctrl) {
@@ -2948,6 +2951,8 @@ static int __init initDriver(void)
 		printk("pvi_io: can't get major number\n");
 		return ret;
 	}
+
+reg_uart1 = ioremap(MX6SL_UART1_BASE_ADDR, SZ_4K);
 
     gpio_initials();
 
