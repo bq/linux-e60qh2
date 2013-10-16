@@ -283,7 +283,7 @@ static int zforce_start(struct zforce_ts *ts)
 		goto error;
 	}
 
-	if (zforce_setconfig(ts, SETCONFIG_DUALTOUCH)) {
+	if (zforce_setconfig(ts, 0)) {
 		dev_err(&client->dev, "Unable to set config\n");
 		goto error;
 	}
@@ -614,6 +614,9 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 			break;
 		case NOTIFICATION_INVALID_COMMAND:
 			dev_err(&ts->client->dev, "invalid command: 0x%x\n", payload[RESPONSE_DATA]);
+			break;
+		case NOTIFICATION_OVERRUN:
+			dev_err(&ts->client->dev, "command overrun, last transaction aborted\n");
 			break;
 		default:
 			dev_err(&ts->client->dev, "unrecognized response id: 0x%x\n", payload[RESPONSE_ID]);
