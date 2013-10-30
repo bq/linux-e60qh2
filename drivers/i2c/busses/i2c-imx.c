@@ -494,8 +494,10 @@ static int i2c_imx_xfer(struct i2c_adapter *adapter,
 	int result;
 	struct imx_i2c_struct *i2c_imx = i2c_get_adapdata(adapter);
 
-	if (i2c_imx->suspended)
+	if (i2c_imx->suspended) {
+		dev_warn(&i2c_imx->adapter.dev, "%s: we're suspended\n", __func__);
 		return -EBUSY;
+	}
 
 	dev_dbg(&i2c_imx->adapter.dev, "<%s>\n", __func__);
 
@@ -731,12 +733,14 @@ static int __exit i2c_imx_remove(struct platform_device *pdev)
 }
 
 #ifdef CONFIG_PM
-static int imx_i2c_suspend_noirq(struct device *dev)
+static int imx_i2c_suspend(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct imx_i2c_struct *i2c_imx = platform_get_drvdata(pdev);
 
+	i2c_lock_adapter(&i2c_imx->adapter);
 	i2c_imx->suspended = 1;
+	i2c_unlock_adapter(&i2c_imx->adapter);
 
 	return 0;
 }
@@ -752,7 +756,7 @@ static int imx_i2c_resume(struct device *dev)
 }
 
 static const struct dev_pm_ops imx_i2c_dev_pm_ops = {
-	.suspend_noirq = imx_i2c_suspend_noirq,
+	.suspend = imx_i2c_suspend,
 	.resume = imx_i2c_resume,
 };
 
