@@ -327,11 +327,12 @@ static volatile unsigned char gbTPS65185_REG_REVID=0x45; // default is TPS65185 
 static const unsigned char gbTPS65185_REG_REVID_addr=0x10;
 
 
+#define MAX_I2C_RETRY	10
 
 static int tps65185_set_reg(unsigned char bRegAddr,unsigned char bRegSetVal)
 {
 	int iRet=TPS65185_RET_SUCCESS;
-	int iChk;
+	int iChk, retry = 0;
 	unsigned char bA[2] ;
 	//int irq_INT,irq_PG;
 
@@ -357,7 +358,14 @@ static int tps65185_set_reg(unsigned char bRegAddr,unsigned char bRegSetVal)
 	down(&gtTPS65185_DataA[0].i2clock);
 	bA[0]=bRegAddr;
 	bA[1]=bRegSetVal;
+
 	iChk = i2c_master_send(gpI2C_clientA[0], (const char *)bA, sizeof(bA));
+	while (iChk == -EBUSY && retry < MAX_I2C_RETRY) {
+		retry++;
+		msleep(10);
+		iChk = i2c_master_send(gpI2C_clientA[0], (const char *)bA, sizeof(bA));
+	}
+
 	if (iChk < 0) {
 		ERR_MSG("%s(%d):%d=%s(),regAddr=0x%x,regVal=0x%x fail !\n",__FILE__,__LINE__,\
 			iChk,"i2c_master_send",bRegAddr,bRegSetVal);
@@ -372,7 +380,7 @@ static int tps65185_set_reg(unsigned char bRegAddr,unsigned char bRegSetVal)
 static int tps65185_get_reg(unsigned char bRegAddr,unsigned char  *O_pbRegVal)
 {
 	int iRet=TPS65185_RET_SUCCESS;
-	int iChk;
+	int iChk, retry = 0;
 	unsigned char bA[1] ;
 	//int irq_INT , irq_PG;
 
@@ -406,13 +414,26 @@ static int tps65185_get_reg(unsigned char bRegAddr,unsigned char  *O_pbRegVal)
 	}
 
 	iChk = i2c_master_send(gpI2C_clientA[0], (const char *)bA, 1);
+	while (iChk == -EBUSY && retry < MAX_I2C_RETRY) {
+		msleep(10);
+		retry++;
+		iChk = i2c_master_send(gpI2C_clientA[0], (const char *)bA, 1);
+	}
+
+	retry = 0;
+
 	if (iChk < 0) {
 		ERR_MSG("%s(%d):%s i2c_master_send fail !\n",__FILE__,__LINE__,__FUNCTION__);
 		iRet = TPS65185_RET_I2CTRANS_ERR;
 	}
 	
-
 	iChk = i2c_master_recv(gpI2C_clientA[0], bA, 1);
+	while (iChk == -EBUSY && retry < MAX_I2C_RETRY) {
+		msleep(10);
+		retry++;
+		iChk = i2c_master_recv(gpI2C_clientA[0], bA, 1);
+	}
+
 	if (iChk < 0) {
 		ERR_MSG("%s(%d):%s i2c_master_recv fail !\n",__FILE__,__LINE__,__FUNCTION__);
 		iRet = TPS65185_RET_I2CTRANS_ERR;
