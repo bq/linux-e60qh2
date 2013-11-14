@@ -761,9 +761,29 @@ unlock:
 
 	return ret;
 }
+
+static int zforce_suspend_noirq(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	const struct zforce_ts_platdata *pdata = client->dev.platform_data;
+
+	if (device_may_wakeup(&client->dev) || !gSleep_Mode_Suspend) {
+		if(gpio_get_value(pdata->gpio_int) == 0) {
+			dev_warn(&client->dev, "data waiting, aborting suspend\n");
+			return -EBUSY;
+		}
+	}
+
+	return 0;
+}
 #endif
 
-static SIMPLE_DEV_PM_OPS(zforce_pm_ops, zforce_suspend, zforce_resume);
+//static SIMPLE_DEV_PM_OPS(zforce_pm_ops, zforce_suspend, zforce_resume);
+static const struct dev_pm_ops zforce_pm_ops = {
+	.suspend = zforce_suspend,
+	.suspend_noirq = zforce_suspend_noirq,
+	.resume = zforce_resume,
+};
 
 static int zforce_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)

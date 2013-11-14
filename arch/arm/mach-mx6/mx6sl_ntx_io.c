@@ -2290,6 +2290,9 @@ void ntx_gpio_suspend (void)
 				gpio_direction_input (MX6SL_WALTOP_RST);
 			}
 		}
+	} else {
+		if(gpio_get_value(gMX6SL_IR_TOUCH_INT) == 0)
+			printk("zforce has data waiting!\n");
 
 	}
 
