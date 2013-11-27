@@ -409,6 +409,9 @@ static int zforce_touch_event(struct zforce_ts *ts, u8* payload)
 			dev_warn(&client->dev, "coordinates (%d,%d) invalid\n",
 				point[i].coord_x, point[i].coord_y);
 			point[i].coord_x = point[i].coord_y = 0;
+
+			printk("[%s-%d] zforce got confused, scheduling reset\n", __func__, __LINE__);
+			schedule_delayed_work(&ts->reset, HZ / 10);
 		}
 
 		point[i].state = payload[9 * i + 5] & 0x03;
@@ -739,6 +742,8 @@ static int zforce_resume(struct device *dev)
 			if (ret)
 				goto unlock;
 		}
+
+		zforce_interrupt(client->irq, ts);
 	} else if (input->users) {
 		dev_dbg(&client->dev, "resume without being a wakeup source\n");
 
@@ -882,7 +887,7 @@ static int zforce_probe(struct i2c_client *client,
 	 * not need to limit it to the interrupt edge.
 	 */
 	ret = request_threaded_irq(client->irq, NULL, zforce_interrupt,
-				   IRQF_TRIGGER_LOW | IRQF_ONESHOT,
+				   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 				   input_dev->name, ts);
 	if (ret) {
 		dev_err(&client->dev, "irq %d request failed\n", client->irq);
