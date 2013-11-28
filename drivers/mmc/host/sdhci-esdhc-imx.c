@@ -941,6 +941,9 @@ static int esdhc_pltfm_init(struct sdhci_host *host, struct sdhci_pltfm_data *pd
 		host->quirks &= ~SDHCI_QUIRK_BROKEN_CARD_DETECTION;
 	}
 
+	/* the mmcs can be wakeup sources */
+	device_set_wakeup_capable(mmc_dev(host->mmc), true);
+
 	if (host->clk_mgr_en)
 		clk_disable(pltfm_host->clk);
 	return 0;
