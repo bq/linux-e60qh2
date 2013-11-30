@@ -742,8 +742,6 @@ static int zforce_resume(struct device *dev)
 			if (ret)
 				goto unlock;
 		}
-
-		zforce_interrupt(client->irq, ts);
 	} else if (input->users) {
 		dev_dbg(&client->dev, "resume without being a wakeup source\n");
 
@@ -887,7 +885,7 @@ static int zforce_probe(struct i2c_client *client,
 	 * not need to limit it to the interrupt edge.
 	 */
 	ret = request_threaded_irq(client->irq, NULL, zforce_interrupt,
-				   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+				   IRQF_TRIGGER_LOW | IRQF_ONESHOT,
 				   input_dev->name, ts);
 	if (ret) {
 		dev_err(&client->dev, "irq %d request failed\n", client->irq);
