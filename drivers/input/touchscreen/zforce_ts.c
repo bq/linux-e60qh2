@@ -537,7 +537,30 @@ static void zforce_complete(struct zforce_ts *ts, int cmd, int result)
 /* FIXME: not for upstream */
 extern int gSleep_Mode_Suspend;
 
-static irqreturn_t zforce_interrupt(int irq, void *dev_id)
+/*
+ * Possible deadlock. Threads are frozen first, so if an interrupt
+ * happens after this, but before the system fully sleeps, the
+ * interrupt may start, making handle_level_irq mask the irq and wait
+ * for the interrupt thread to start, which only happens _after_ the next
+ * resume. So until this happens the irq is masked making the screen effectively
+ * dead. To fix this, check the suspend state in the non-threaded irq handler
+ * to send the wakeup-event and let the system resume to handle the irq then.
+ */
+static irqreturn_t zforce_irq(int irq, void *dev_id)
+{
+	struct zforce_ts *ts = dev_id;
+	struct i2c_client *client = ts->client;
+
+	if (ts->suspended) {
+		/* FIXME: remove gSleep_Mode_Suspend condition */
+		if (device_may_wakeup(&client->dev) || !gSleep_Mode_Suspend)
+			pm_wakeup_event(&client->dev, 500);
+	}
+
+	return IRQ_WAKE_THREAD;
+}
+
+static irqreturn_t zforce_irq_thread(int irq, void *dev_id)
 {
 	struct zforce_ts *ts = dev_id;
 	struct i2c_client *client = ts->client;
@@ -550,9 +573,6 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 	 * a wakeup signal if necessary and return
 	 */
 	if (ts->suspended) {
-		/* FIXME: remove gSleep_Mode_Suspend condition */
-		if (device_may_wakeup(&client->dev) || !gSleep_Mode_Suspend)
-			pm_wakeup_event(&client->dev, 500);
 		msleep(20);
 		return IRQ_HANDLED;
 	}
@@ -884,7 +904,7 @@ static int zforce_probe(struct i2c_client *client,
 	 * Therefore we can trigger the interrupt anytime it is low and do
 	 * not need to limit it to the interrupt edge.
 	 */
-	ret = request_threaded_irq(client->irq, NULL, zforce_interrupt,
+	ret = request_threaded_irq(client->irq, zforce_irq, zforce_irq_thread,
 				   IRQF_TRIGGER_LOW | IRQF_ONESHOT,
 				   input_dev->name, ts);
 	if (ret) {
