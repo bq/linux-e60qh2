@@ -554,7 +554,7 @@ static irqreturn_t zforce_irq(int irq, void *dev_id)
 	if (ts->suspended) {
 		/* FIXME: remove gSleep_Mode_Suspend condition */
 		if (device_may_wakeup(&client->dev) || !gSleep_Mode_Suspend)
-			pm_wakeup_event(&client->dev, 500);
+			pm_wakeup_event(&client->dev, 2000);
 	}
 
 	return IRQ_WAKE_THREAD;
