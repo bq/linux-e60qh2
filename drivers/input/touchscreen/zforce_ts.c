@@ -599,8 +599,8 @@ static irqreturn_t zforce_irq_thread(int irq, void *dev_id)
 			/* Always report touch-events received when
 			 * suspending, when being a wakeup source
 			 */
-			if (ts->suspending && (device_may_wakeup(&client->dev) || !gSleep_Mode_Suspend))
-				pm_wakeup_event(&client->dev, 500);
+			if (device_may_wakeup(&client->dev) || !gSleep_Mode_Suspend)
+				pm_wakeup_event(&client->dev, 2000);
 			zforce_touch_event(ts, &payload[RESPONSE_DATA]);
 			break;
 		case NOTIFICATION_BOOTCOMPLETE:
