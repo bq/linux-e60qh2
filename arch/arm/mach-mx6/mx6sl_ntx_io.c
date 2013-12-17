@@ -2585,9 +2585,16 @@ void ntx_gpio_suspend (void)
 
 		if(-1!=giISD_3V3_ON_Ctrl) {
 			dwDisableBit = (unsigned long)(1<<31);
-			ntx_gpio_insuspend_dir[2] &= ~dwDisableBit; //GP3_31 for ISD_3V3_ON output
+			ntx_gpio_insuspend_dir[2] |= dwDisableBit; //GP3_31 for ISD_3V3_ON output
 		}
 
+		/*        __raw_writel( ntx_gpio_dir[4]&(~0x003fffff), base+4);
+		 * Don't reconfigure the zforce_rst pin GPIO(5, 9), as it gets put to
+		 * sleep on its own during suspend and the rst line being still 1
+		 * resumes the system when it gets reconfigured as input.
+		 */
+		dwDisableBit = (unsigned long)(1 << 9); // GP?_9 .
+		ntx_gpio_insuspend_dir[4] &= ~dwDisableBit;
 
 		base = IO_ADDRESS(GPIO1_BASE_ADDR);
 		ntx_gpio_dir[0] = __raw_readl(base+4);
