@@ -283,7 +283,8 @@ static int zforce_start(struct zforce_ts *ts)
 		goto error;
 	}
 
-	if (zforce_setconfig(ts, 0)) {
+	ret = zforce_setconfig(ts, 0);
+	if (ret) {
 		dev_err(&client->dev, "Unable to set config\n");
 		goto error;
 	}
