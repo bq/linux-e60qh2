@@ -732,9 +732,11 @@ exit:
 
 static void tps65185_pwrdwn_work_func(struct work_struct *work)
 {
+	pm_stay_awake(&gpI2C_clientA[0]->dev);
 	down(&gtTPS65185_DataA[0].chmod_lock);
 	_tps65185_pwrdwn();
 	up(&gtTPS65185_DataA[0].chmod_lock);
+	pm_relax(&gpI2C_clientA[0]->dev);
 }
 
 
@@ -1067,6 +1069,8 @@ int tps65185_init(int iPort,int iEPDTimingType)
 			ERR_MSG("[Error] %s : TPS65185_RET_NEWDEVFAIL\n",__FUNCTION__);
 			return TPS65185_RET_NEWDEVFAIL;
 		}
+
+		device_init_wakeup(&gpI2C_clientA[iChipIdx]->dev, true);
 		printk("client%d@i2c%d ,addr=0x%x,name=%s\n",iChipIdx,iPort,
 			gpI2C_clientA[iChipIdx]->addr,gpI2C_clientA[iChipIdx]->name);
 
