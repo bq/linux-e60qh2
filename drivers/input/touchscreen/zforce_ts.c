@@ -731,6 +731,13 @@ static int zforce_suspend(struct device *dev)
 		disable_irq(client->irq);
 	}
 
+	/* bring the controller in the reset state for poweroff */
+	if (gSleep_Mode_Suspend) {
+		dev_info(&client->dev, "shutting down\n");
+		gpio_direction_output(pdata->gpio_int, 0);
+		gpio_set_value(pdata->gpio_rst, 0);
+	}
+
 	ts->suspended = true;
 
 unlock:
@@ -745,11 +752,30 @@ static int zforce_resume(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct zforce_ts *ts = i2c_get_clientdata(client);
 	struct input_dev *input = ts->input;
+	const struct zforce_ts_platdata *pdata = client->dev.platform_data;
 	int ret = 0;
 
 	mutex_lock(&input->mutex);
 
 	ts->suspended = false;
+
+	if (gSleep_Mode_Suspend) {
+		dev_info(&client->dev, "restarting\n");
+
+		gpio_direction_input(pdata->gpio_int);
+		msleep(20);
+
+		enable_irq(client->irq);
+
+		/* let the controller boot */
+		gpio_set_value(pdata->gpio_rst, 1);
+
+		ts->command_waiting = NOTIFICATION_BOOTCOMPLETE;
+		if (wait_for_completion_timeout(&ts->command_done, WAIT_TIMEOUT) == 0)
+			dev_warn(&client->dev, "bootcomplete timed out\n");
+
+		disable_irq(client->irq);
+	}
 
 	/* FIXME: remove gSleep_Mode_Suspend condition */
 	if (device_may_wakeup(&client->dev) || !gSleep_Mode_Suspend) {
