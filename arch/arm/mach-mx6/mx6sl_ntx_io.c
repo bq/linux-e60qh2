@@ -954,6 +954,8 @@ static void ntx_system_poweroff(const char *pszDomain)
 	}
 }
 
+static last_FL_set;
+
 static int  ioctlDriver(struct file *filp, unsigned int command, unsigned long arg)
 {
 	unsigned long i = 0, temp;
@@ -1321,6 +1323,8 @@ printk("front light sleep %d\n", p);
 
 						msleep(100);
 						gpio_direction_output(MX6SL_FL_EN,0);
+
+						ioctlDriver(NULL, CM_FRONT_LIGHT_SET, last_FL_set);
 					}
 				}
 				else if(last_FL_duty != 0){
@@ -1330,6 +1334,7 @@ printk("front light sleep %d\n", p);
 					schedule_delayed_work(&FL_off, 120);
 				}
 				last_FL_duty = p;
+				last_FL_set = p;
 			}
 			break;
 
