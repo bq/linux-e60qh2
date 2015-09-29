@@ -4,6 +4,8 @@
  * Copyright (C) 2008 Google, Inc.
  * Author: Mike Lockwood <lockwood@android.com>
  *
+ * Copyright (C) 2015 Freescale Semiconductor, Inc.
+ *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
  * may be copied, distributed, and modified under those terms.
@@ -46,7 +48,6 @@
 #include "epautoconf.c"
 #include "composite.c"
 
-#include "f_audio_source.c"
 #include "f_mass_storage.c"
 #include "u_serial.c"
 #include "f_acm.c"
@@ -185,7 +186,36 @@ static void android_work(struct work_struct *data)
 	}
 }
 
+static void android_enable(struct android_dev *dev)
+{
+	struct usb_composite_dev *cdev = dev->cdev;
+	unsigned long flags;
 
+	usb_add_config(cdev, &android_config_driver, android_bind_config);
+	spin_lock_irqsave(&cdev->lock, flags);
+	if (dev->connected) {
+		usb_gadget_disconnect(cdev->gadget);
+		mdelay(10);
+		usb_gadget_connect(cdev->gadget);
+		usb_gadget_vbus_connect(cdev->gadget);
+	}
+	spin_unlock_irqrestore(&cdev->lock, flags);
+}
+
+static void android_disable(struct android_dev *dev)
+{
+	struct usb_composite_dev *cdev = dev->cdev;
+	unsigned long flags;
+
+	spin_lock_irqsave(&cdev->lock, flags);
+	if (dev->connected) {
+		/* Cancel pending control requests */
+		usb_gadget_disconnect(cdev->gadget);
+		usb_ep_dequeue(cdev->gadget->ep0, cdev->req);
+	}
+	spin_unlock_irqrestore(&cdev->lock, flags);
+	usb_remove_config(cdev, &android_config_driver);
+}
 /*-------------------------------------------------------------------------*/
 /* Supported functions initialization */
 
@@ -198,6 +228,29 @@ static void adb_function_cleanup(struct android_usb_function *f)
 {
 	adb_cleanup();
 }
+
+static void adb_ready_callback(void)
+{
+	struct android_dev *dev = _android_dev;
+
+	mutex_lock(&dev->mutex);
+
+	android_enable(dev);
+
+	mutex_unlock(&dev->mutex);
+}
+
+static void adb_closed_callback(void)
+{
+	struct android_dev *dev = _android_dev;
+
+	mutex_lock(&dev->mutex);
+
+	android_disable(dev);
+
+	mutex_unlock(&dev->mutex);
+}
+
 
 static int adb_function_bind_config(struct android_usb_function *f, struct usb_configuration *c)
 {
@@ -336,7 +389,6 @@ static struct android_usb_function ptp_function = {
 	.init		= ptp_function_init,
 	.cleanup	= ptp_function_cleanup,
 	.bind_config	= ptp_function_bind_config,
-	.ctrlrequest	= mtp_function_ctrlrequest,
 };
 
 
@@ -645,67 +697,6 @@ static struct android_usb_function accessory_function = {
 	.ctrlrequest	= accessory_function_ctrlrequest,
 };
 
-static int audio_source_function_init(struct android_usb_function *f,
-			struct usb_composite_dev *cdev)
-{
-	struct audio_source_config *config;
-
-	config = kzalloc(sizeof(struct audio_source_config), GFP_KERNEL);
-	if (!config)
-		return -ENOMEM;
-	config->card = -1;
-	config->device = -1;
-	f->config = config;
-	return 0;
-}
-
-static void audio_source_function_cleanup(struct android_usb_function *f)
-{
-	kfree(f->config);
-}
-
-static int audio_source_function_bind_config(struct android_usb_function *f,
-						struct usb_configuration *c)
-{
-	struct audio_source_config *config = f->config;
-
-	return audio_source_bind_config(c, config);
-}
-
-static void audio_source_function_unbind_config(struct android_usb_function *f,
-						struct usb_configuration *c)
-{
-	struct audio_source_config *config = f->config;
-
-	config->card = -1;
-	config->device = -1;
-}
-
-static ssize_t audio_source_pcm_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct android_usb_function *f = dev_get_drvdata(dev);
-	struct audio_source_config *config = f->config;
-
-	/* print PCM card and device numbers */
-	return sprintf(buf, "%d %d\n", config->card, config->device);
-}
-
-static DEVICE_ATTR(pcm, S_IRUGO | S_IWUSR, audio_source_pcm_show, NULL);
-
-static struct device_attribute *audio_source_function_attributes[] = {
-	&dev_attr_pcm,
-	NULL
-};
-
-static struct android_usb_function audio_source_function = {
-	.name		= "audio_source",
-	.init		= audio_source_function_init,
-	.cleanup	= audio_source_function_cleanup,
-	.bind_config	= audio_source_function_bind_config,
-	.unbind_config	= audio_source_function_unbind_config,
-	.attributes	= audio_source_function_attributes,
-};
 
 static struct android_usb_function *supported_functions[] = {
 	&adb_function,
@@ -715,7 +706,6 @@ static struct android_usb_function *supported_functions[] = {
 	&rndis_function,
 	&mass_storage_function,
 	&accessory_function,
-	&audio_source_function,
 	NULL
 };
 
@@ -995,7 +985,10 @@ field ## _store(struct device *dev, struct device_attribute *attr,	\
 		const char *buf, size_t size)				\
 {									\
 	if (size >= sizeof(buffer)) return -EINVAL;			\
-	return strlcpy(buffer, buf, sizeof(buffer));			\
+	if (sscanf(buf, "%s", buffer) == 1) {				\
+		return size;						\
+	}								\
+	return -1;							\
 }									\
 static DEVICE_ATTR(field, S_IRUGO | S_IWUSR, field ## _show, field ## _store);
 
@@ -1179,11 +1172,6 @@ static void android_disconnect(struct usb_gadget *gadget)
 	unsigned long flags;
 
 	composite_disconnect(gadget);
-	/* accessory HID support can be active while the
-	   accessory function is not actually enabled,
-	   so we need to inform it when we are disconnected.
-	 */
-	acc_disconnect();
 
 	spin_lock_irqsave(&cdev->lock, flags);
 	dev->connected = 0;
@@ -1194,7 +1182,7 @@ static void android_disconnect(struct usb_gadget *gadget)
 static void android_suspend(struct usb_gadget *gadget)
 {
 	composite_suspend(gadget);
-	wake_lock_timeout(&wakelock, HZ/2);
+	wake_unlock(&wakelock);
 }
 
 static void android_resume(struct usb_gadget *gadget)

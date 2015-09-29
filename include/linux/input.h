@@ -441,6 +441,13 @@ struct input_keymap_entry {
 #define KEY_WIMAX		246
 #define KEY_RFKILL		247	/* Key that controls all radios */
 
+#define KEY_TAP			248
+#define KEY_DOUBLETAP		249
+#define KEY_SHAKELEFT		250
+#define KEY_SHAKERIGHT		251
+#define KEY_SHAKEFORWARD	252
+#define KEY_SHAKEBACKWARD	253
+
 /* Code 255 is reserved for special needs of AT keyboard driver */
 
 #define BTN_MISC		0x100
@@ -1477,6 +1484,11 @@ void input_inject_event(struct input_handle *handle, unsigned int type, unsigned
 static inline void input_report_key(struct input_dev *dev, unsigned int code, int value)
 {
 	input_event(dev, EV_KEY, code, !!value);
+}
+
+static inline void input_report_zforcekey(struct input_dev *dev, unsigned int code, int value)
+{
+	input_event(dev, EV_KEY, code, value);
 }
 
 static inline void input_report_rel(struct input_dev *dev, unsigned int code, int value)

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2013 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright (C) 2011-2012 Freescale Semiconductor, Inc. All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -93,7 +93,6 @@ void mx6_get_otghost_vbus_func(driver_vbus_func *driver_vbus)
 	*driver_vbus = s_otg_driver_vbus;
 }
 EXPORT_SYMBOL(mx6_get_otghost_vbus_func);
-
 
 
 enum fsl_usb2_modes get_usb_mode(struct fsl_usb2_platform_data *pdata)

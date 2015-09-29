@@ -1,6 +1,6 @@
 /****************************************************************************
 *
-*    Copyright (C) 2005 - 2013 by Vivante Corp.
+*    Copyright (C) 2005 - 2012 by Vivante Corp.
 *
 *    This program is free software; you can redistribute it and/or modify
 *    it under the terms of the GNU General Public License as published by
@@ -17,6 +17,8 @@
 *    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 *
 *****************************************************************************/
+
+
 
 
 #ifndef __gc_hal_kernel_buffer_h_
@@ -57,6 +59,11 @@ typedef struct _gcsSTATE_DELTA
     gctUINT                     num;
 #endif
 
+    /* For dumping. */
+#if gcdDUMP
+    gcoOS                       os;
+#endif
+
     /* Main state delta ID. Every time state delta structure gets reinitialized,
        main ID is incremented. If main state ID overflows, all map entry IDs get
        reinitialized to make sure there is no potential erroneous match after
@@ -72,22 +79,22 @@ typedef struct _gcsSTATE_DELTA
     /* Number of states currently stored in the record array. */
     gctUINT                     recordCount;
 
-    /* Record array; holds all modified states in gcsSTATE_DELTA_RECORD. */
-    gctUINT64                   recordArray;
+    /* Record array; holds all modified states. */
+    gcsSTATE_DELTA_RECORD_PTR   recordArray;
 
     /* Map entry ID is used for map entry validation. If map entry ID does not
        match the main state delta ID, the entry and the corresponding state are
        considered not in use. */
-    gctUINT64                   mapEntryID;
+    gctUINT_PTR                 mapEntryID;
     gctUINT                     mapEntryIDSize;
 
     /* If the map entry ID matches the main state delta ID, index points to
        the state record in the record array. */
-    gctUINT64                   mapEntryIndex;
+    gctUINT_PTR                 mapEntryIndex;
 
-    /* Previous and next state deltas in gcsSTATE_DELTA. */
-    gctUINT64                   prev;
-    gctUINT64                   next;
+    /* Previous and next state deltas. */
+    gcsSTATE_DELTA_PTR          prev;
+    gcsSTATE_DELTA_PTR          next;
 }
 gcsSTATE_DELTA;
 
@@ -107,38 +114,38 @@ struct _gcoCMDBUF
     gctBOOL                     usingFilterBlit;
     gctBOOL                     usingPalette;
 
-    /* Physical address of command buffer. Just a name. */
-    gctUINT32                   physical;
+    /* Physical address of command buffer. */
+    gctPHYS_ADDR                physical;
 
     /* Logical address of command buffer. */
-    gctUINT64                   logical;
+    gctPOINTER                  logical;
 
     /* Number of bytes in command buffer. */
-    gctUINT                     bytes;
+    gctSIZE_T                   bytes;
 
     /* Start offset into the command buffer. */
-    gctUINT                     startOffset;
+    gctUINT32                   startOffset;
 
     /* Current offset into the command buffer. */
-    gctUINT                     offset;
+    gctUINT32                   offset;
 
     /* Number of free bytes in command buffer. */
-    gctUINT                     free;
+    gctSIZE_T                   free;
 
     /* Location of the last reserved area. */
-    gctUINT64                   lastReserve;
+    gctPOINTER                  lastReserve;
     gctUINT                     lastOffset;
 
 #if gcdSECURE_USER
     /* Hint array for the current command buffer. */
     gctUINT                     hintArraySize;
-    gctUINT64                   hintArray;
-    gctUINT64                   hintArrayTail;
+    gctUINT32_PTR               hintArray;
+    gctUINT32_PTR               hintArrayTail;
 #endif
 
 #if gcmIS_DEBUG(gcdDEBUG_CODE)
     /* Last load state command location and hardware address. */
-    gctUINT64                   lastLoadStatePtr;
+    gctUINT32_PTR               lastLoadStatePtr;
     gctUINT32                   lastLoadStateAddress;
     gctUINT32                   lastLoadStateCount;
 #endif
@@ -146,8 +153,8 @@ struct _gcoCMDBUF
 
 typedef struct _gcsQUEUE
 {
-    /* Pointer to next gcsQUEUE structure in gcsQUEUE. */
-    gctUINT64                   next;
+    /* Pointer to next gcsQUEUE structure. */
+    gcsQUEUE_PTR                next;
 
     /* Event information. */
     gcsHAL_INTERFACE            iface;

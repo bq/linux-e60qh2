@@ -1,6 +1,6 @@
 /****************************************************************************
 *
-*    Copyright (C) 2005 - 2013 by Vivante Corp.
+*    Copyright (C) 2005 - 2012 by Vivante Corp.
 *
 *    This program is free software; you can redistribute it and/or modify
 *    it under the terms of the GNU General Public License as published by
@@ -17,6 +17,8 @@
 *    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 *
 *****************************************************************************/
+
+
 
 
 #ifndef __gc_hal_engine_h_
@@ -388,37 +390,6 @@ gceSTATUS
 gcoSURF_IsRenderable(
     IN gcoSURF Surface
     );
-
-#if gcdSYNC
-gceSTATUS
-gcoSURF_GetFence(
-    IN gcoSURF Surface
-    );
-gceSTATUS
-gcoSURF_WaitFence(
-    IN gcoSURF Surface
-    );
-
-gceSTATUS
-gcoSTREAM_GetFence(
-    IN gcoSTREAM stream
-    );
-
-gceSTATUS
-gcoSTREAM_WaitFence(
-    IN gcoSTREAM stream
-    );
-
-gceSTATUS
-gcoINDEX_GetFence(
-    IN gcoINDEX index
-    );
-
-gceSTATUS
-gcoINDEX_WaitFence(
-    IN gcoINDEX index
-    );
-#endif
 
 /******************************************************************************\
 ******************************** gcoINDEX Object *******************************
@@ -1430,16 +1401,6 @@ typedef enum _gceTEXTURE_FACE
 }
 gceTEXTURE_FACE;
 
-#if gcdFORCE_MIPMAP
-typedef enum
-{
-    gcvForceMipDisabled  = 0,
-    gcvForceMipEnable    = 1,
-    gcvForceMipGenerated = 2,
-    gcvForceMipNever     = 3,
-}gceFORCE_MIPMAP;
-#endif
-
 typedef struct _gcsTEXTURE
 {
     /* Addressing modes. */
@@ -1456,10 +1417,6 @@ typedef struct _gcsTEXTURE
     gceTEXTURE_FILTER           mipFilter;
     gctUINT                     anisoFilter;
     gctBOOL                     forceTopLevel;
-    gctBOOL                     autoMipmap;
-#if gcdFORCE_MIPMAP
-    gceFORCE_MIPMAP             forceMipmap;
-#endif
     /* Level of detail. */
     gctFIXED_POINT              lodBias;
     gctFIXED_POINT              lodMin;
@@ -1493,18 +1450,7 @@ gceSTATUS
 gcoTEXTURE_Destroy(
     IN gcoTEXTURE Texture
     );
-#if gcdFORCE_MIPMAP
-gceSTATUS
-gcoTEXTURE_DestroyForceMipmap(
-    IN gcoTEXTURE Texture
-    );
 
-gceSTATUS
-gcoTEXTURE_GetMipLevels(
-    IN gcoTEXTURE Texture,
-    OUT gctINT * levels
-    );
-#endif
 /* Replace a mipmap in gcoTEXTURE object. */
 gceSTATUS
 gcoTEXTURE_ReplaceMipMap(
@@ -2030,7 +1976,7 @@ gcoHAL_GetSharedInfo(
     IN gctUINT32 DataId,
     OUT gctUINT8_PTR Data,
     IN gctSIZE_T Bytes,
-    IN gctUINT64 Node,
+    IN gcuVIDMEM_NODE_PTR Node,
     OUT gctUINT8_PTR NodeData,
     IN gceVIDMEM_NODE_SHARED_INFO_TYPE SharedInfoType
     );
@@ -2040,7 +1986,7 @@ gcoHAL_SetSharedInfo(
     IN gctUINT32 DataId,
     IN gctUINT8_PTR Data,
     IN gctSIZE_T Bytes,
-    IN gctUINT64 Node,
+    IN gcuVIDMEM_NODE_PTR Node,
     IN gctUINT8_PTR NodeData,
     IN gceVIDMEM_NODE_SHARED_INFO_TYPE SharedInfoType
     );

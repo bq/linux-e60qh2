@@ -72,7 +72,6 @@ struct ion_platform_heap {
 	const char *name;
 	ion_phys_addr_t base;
 	size_t size;
-	unsigned char cacheable;
 };
 
 /**

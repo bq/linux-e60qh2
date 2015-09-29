@@ -101,7 +101,8 @@ static inline void imx2_wdt_setup(void)
 	/* Strip the old watchdog Time-Out value */
 	val &= ~IMX2_WDT_WCR_WT;
 	/* Generate reset if WDOG times out */
-	val &= ~IMX2_WDT_WCR_WRE;
+	//	val &= ~IMX2_WDT_WCR_WRE;
+	val |= IMX2_WDT_WCR_WRE;
 	/* Keep Watchdog Disabled */
 	val &= ~IMX2_WDT_WCR_WDE;
 	/* Set the watchdog's Time-Out value */

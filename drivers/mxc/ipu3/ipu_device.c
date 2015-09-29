@@ -680,6 +680,11 @@ static void dump_check_warn(struct device *dev, int warn)
 
 static int set_crop(struct ipu_crop *crop, int width, int height, int fmt)
 {
+	if ((width == 0) || (height == 0)) {
+		pr_err("Invalid param: width=%d, height=%d\n", width, height);
+		return -EINVAL;
+	}
+
 	if ((IPU_PIX_FMT_TILED_NV12 == fmt) ||
 		(IPU_PIX_FMT_TILED_NV12F == fmt)) {
 		if (crop->w || crop->h) {
@@ -719,6 +724,12 @@ static int set_crop(struct ipu_crop *crop, int width, int height, int fmt)
 		crop->h -= crop->h%8;
 	}
 
+	if ((crop->w == 0) || (crop->h == 0)) {
+		pr_err("Invalid crop param: crop.w=%d, crop.h=%d\n",
+			crop->w, crop->h);
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
@@ -733,26 +744,28 @@ static void update_offset(unsigned int fmt,
 	case IPU_PIX_FMT_YUV420P:
 		*off = pos_y * width + pos_x;
 		*uoff = (width * (height - pos_y) - pos_x)
-			+ ((width/2 * pos_y/2) + pos_x/2);
-		*voff = *uoff + (width/2 * height/2);
+			+ (width/2) * (pos_y/2) + pos_x/2;
+		/* In case height is odd, round up to even */
+		*voff = *uoff + (width/2) * ((height+1)/2);
 		break;
 	case IPU_PIX_FMT_YVU420P:
 		*off = pos_y * width + pos_x;
 		*voff = (width * (height - pos_y) - pos_x)
-			+ ((width/2 * pos_y/2) + pos_x/2);
-		*uoff = *voff + (width/2 * height/2);
+			+ (width/2) * (pos_y/2) + pos_x/2;
+		/* In case height is odd, round up to even */
+		*uoff = *voff + (width/2) * ((height+1)/2);
 		break;
 	case IPU_PIX_FMT_YVU422P:
 		*off = pos_y * width + pos_x;
 		*voff = (width * (height - pos_y) - pos_x)
-			+ ((width * pos_y)/2 + pos_x/2);
-		*uoff = *voff + (width * height)/2;
+			+ (width/2) * pos_y + pos_x/2;
+		*uoff = *voff + (width/2) * height;
 		break;
 	case IPU_PIX_FMT_YUV422P:
 		*off = pos_y * width + pos_x;
 		*uoff = (width * (height - pos_y) - pos_x)
-			+ (width * pos_y)/2 + pos_x/2;
-		*voff = *uoff + (width * height)/2;
+			+ (width/2) * pos_y + pos_x/2;
+		*voff = *uoff + (width/2) * height;
 		break;
 	case IPU_PIX_FMT_YUV444P:
 		*off = pos_y * width + pos_x;
@@ -762,7 +775,7 @@ static void update_offset(unsigned int fmt,
 	case IPU_PIX_FMT_NV12:
 		*off = pos_y * width + pos_x;
 		*uoff = (width * (height - pos_y) - pos_x)
-			+ width * pos_y/2 + pos_x;
+			+ width * (pos_y/2) + pos_x;
 		break;
 	case IPU_PIX_FMT_TILED_NV12:
 		/*
@@ -799,6 +812,7 @@ static int update_split_setting(struct ipu_task_entry *t, bool vdi_split)
 	struct stripe_param down_stripe;
 	u32 iw, ih, ow, oh;
 	u32 max_width;
+	int ret;
 
 	if (t->output.rotate >= IPU_ROTATE_90_RIGHT)
 		return IPU_CHECK_ERR_SPLIT_WITH_ROT;
@@ -809,12 +823,26 @@ static int update_split_setting(struct ipu_task_entry *t, bool vdi_split)
 	ow = t->output.crop.w;
 	oh = t->output.crop.h;
 
+	memset(&left_stripe, 0, sizeof(left_stripe));
+	memset(&right_stripe, 0, sizeof(right_stripe));
+	memset(&up_stripe, 0, sizeof(up_stripe));
+	memset(&down_stripe, 0, sizeof(down_stripe));
+
 	if (t->set.split_mode & RL_SPLIT) {
+		/*
+		 * We do want equal strips: initialize stripes in case
+		 * calc_stripes returns before actually doing the calculation
+		 */
+		left_stripe.input_width = iw / 2;
+		left_stripe.output_width = ow / 2;
+		right_stripe.input_column = iw / 2;
+		right_stripe.output_column = ow / 2;
+
 		if (vdi_split)
 			max_width = soc_max_vdi_in_width();
 		else
 			max_width = soc_max_out_width();
-		ipu_calc_stripes_sizes(iw,
+		ret = ipu_calc_stripes_sizes(iw,
 				ow,
 				max_width,
 				(((unsigned long long)1) << 32), /* 32bit for fractional*/
@@ -823,6 +851,9 @@ static int update_split_setting(struct ipu_task_entry *t, bool vdi_split)
 				t->output.format,
 				&left_stripe,
 				&right_stripe);
+		if (ret)
+			dev_dbg(t->dev, "Warn: no:0x%x,calc_stripes ret:%d\n",
+				 t->task_no, ret);
 		t->set.sp_setting.iw = left_stripe.input_width;
 		t->set.sp_setting.ow = left_stripe.output_width;
 		t->set.sp_setting.outh_resize_ratio = left_stripe.irr;
@@ -846,7 +877,15 @@ static int update_split_setting(struct ipu_task_entry *t, bool vdi_split)
 		return IPU_CHECK_ERR_SPLIT_OUTPUTW_OVER;
 
 	if (t->set.split_mode & UD_SPLIT) {
-		ipu_calc_stripes_sizes(ih,
+		/*
+		 * We do want equal strips: initialize stripes in case
+		 * calc_stripes returns before actually doing the calculation
+		 */
+		up_stripe.input_width = ih / 2;
+		up_stripe.output_width = oh / 2;
+		down_stripe.input_column = ih / 2;
+		down_stripe.output_column = oh / 2;
+		ret = ipu_calc_stripes_sizes(ih,
 				oh,
 				soc_max_out_height(),
 				(((unsigned long long)1) << 32), /* 32bit for fractional*/
@@ -855,6 +894,9 @@ static int update_split_setting(struct ipu_task_entry *t, bool vdi_split)
 				t->output.format,
 				&up_stripe,
 				&down_stripe);
+		if (ret)
+			dev_err(t->dev, "Warn: no:0x%x,calc_stripes ret:%d\n",
+				 t->task_no, ret);
 		t->set.sp_setting.ih = up_stripe.input_width;
 		t->set.sp_setting.oh = up_stripe.output_width;
 		t->set.sp_setting.outv_resize_ratio = up_stripe.irr;
@@ -2295,6 +2337,9 @@ static void vdi_split_process(struct ipu_soc *ipu, struct ipu_task_entry *t)
 	u32 task_no;
 	u32 i, offset_addr;
 	unsigned char  *base_off;
+	u32 pixwidth;
+	u32 crop_width;
+
 	struct ipu_task_entry *parent = t->parent;
 
 	if (!parent) {
@@ -2304,21 +2349,30 @@ static void vdi_split_process(struct ipu_soc *ipu, struct ipu_task_entry *t)
 	stripe_mode = t->task_no & 0xf;
 	task_no = t->task_no >> 4;
 
-	base_off = (char *) __va(t->output.paddr);
+	pixwidth = fmt_to_bpp(t->output.format)/8;
+	crop_width = t->output.crop.w * pixwidth;
+
+	if (pfn_valid(t->output.paddr >> PAGE_SHIFT))
+		base_off = page_address(pfn_to_page(t->output.paddr >> PAGE_SHIFT));
+	else
+		base_off = (char *)ioremap_nocache(t->output.paddr,
+				t->output.width * t->output.height *
+				pixwidth);
+
 	if (base_off == NULL) {
 		dev_err(t->dev, "ERR[0x%p]Falied get vitual address\n", t);
 		return;
 	}
 
 	vdi_save_lines = (t->output.crop.h - t->set.sp_setting.ud_split_line)/2;
-	vdi_size = vdi_save_lines * t->output.crop.w * 2;
+	vdi_size = vdi_save_lines * t->output.crop.w * pixwidth;
 
 	if (vdi_save_lines <= 0) {
 		dev_err(t->dev, "[0x%p] vdi_save_line error\n", (void *)t);
 		return;
 	}
 
-	/*check vditmpbuf buffer have alloced or buffer size is changed */
+	/* Check vditmpbuf buffer have alloced or buffer size is changed */
 	if ((vdi_save_lines != parent->old_save_lines) ||
 		(vdi_size != parent->old_size)) {
 		if (parent->vditmpbuf[0] != NULL)
@@ -2350,120 +2404,93 @@ static void vdi_split_process(struct ipu_soc *ipu, struct ipu_task_entry *t)
 	if ((stripe_mode == UP_STRIPE) ||
 			(stripe_mode == (UP_STRIPE | LEFT_STRIPE))) {
 		if (!parent->buf0filled) {
-			offset_addr = t->set.o_off +
-				t->set.sp_setting.ud_split_line*t->set.ostride;
-			dmac_flush_range(base_off + offset_addr,
-					base_off + offset_addr + vdi_size);
-			outer_flush_range(t->output.paddr + offset_addr,
-				t->output.paddr + offset_addr + vdi_size);
+			offset_addr = t->set.o_off * pixwidth +
+				t->set.sp_setting.ud_split_line * t->set.ostride ;
 
 			for (i = 0; i < vdi_save_lines; i++)
-				memcpy(parent->vditmpbuf[0] + i*t->output.crop.w*2,
+				memcpy(parent->vditmpbuf[0] + i * crop_width,
 					base_off + offset_addr +
-					i*t->set.ostride, t->output.crop.w*2);
+					i * t->set.ostride, crop_width);
 			parent->buf0filled = true;
 		} else {
-			offset_addr = t->set.o_off + (t->output.crop.h -
+			offset_addr = t->set.o_off * pixwidth + (t->output.crop.h -
 					vdi_save_lines) * t->set.ostride;
 			for (i = 0; i < vdi_save_lines; i++)
-				memcpy(base_off + offset_addr + i*t->set.ostride,
-						parent->vditmpbuf[0] + i*t->output.crop.w*2,
-						t->output.crop.w*2);
+				memcpy(base_off + offset_addr + i * t->set.ostride,
+						parent->vditmpbuf[0] + i * crop_width,
+						crop_width);
 
-			dmac_flush_range(base_off + offset_addr,
-					base_off + offset_addr + i*t->set.ostride);
-			outer_flush_range(t->output.paddr + offset_addr,
-					t->output.paddr + offset_addr + i*t->set.ostride);
 			parent->buf0filled = false;
 		}
 	}
-	/*Down stripe or Down&Left stripe*/
+	/* Down stripe or Down&Left stripe */
 	else if ((stripe_mode == DOWN_STRIPE) ||
 			(stripe_mode == (DOWN_STRIPE | LEFT_STRIPE))) {
 		if (!parent->buf0filled) {
-			offset_addr = t->set.o_off + vdi_save_lines*t->set.ostride;
-			dmac_flush_range(base_off + offset_addr,
-					base_off + offset_addr + vdi_size);
-			outer_flush_range(t->output.paddr + offset_addr,
-					t->output.paddr + offset_addr + vdi_size);
+			offset_addr = t->set.o_off * pixwidth +
+				vdi_save_lines * t->set.ostride;
 
 			for (i = 0; i < vdi_save_lines; i++)
-				memcpy(parent->vditmpbuf[0] + i*t->output.crop.w*2,
-						base_off + offset_addr + i*t->set.ostride,
-						t->output.crop.w*2);
+				memcpy(parent->vditmpbuf[0] + i * crop_width,
+						base_off + offset_addr + i * t->set.ostride,
+						crop_width);
 			parent->buf0filled = true;
-		} else {
-			offset_addr = t->set.o_off;
-			for (i = 0; i < vdi_save_lines; i++)
-				memcpy(base_off + offset_addr + i*t->set.ostride,
-						parent->vditmpbuf[0] + i*t->output.crop.w*2,
-						t->output.crop.w*2);
 
-			dmac_flush_range(base_off + offset_addr,
-					base_off + offset_addr + i*t->set.ostride);
-			outer_flush_range(t->output.paddr + offset_addr,
-					t->output.paddr + offset_addr + i*t->set.ostride);
+		} else {
+			offset_addr = t->set.o_off * pixwidth;
+			for (i = 0; i < vdi_save_lines; i++)
+				memcpy(base_off + offset_addr + i * t->set.ostride,
+						parent->vditmpbuf[0] + i * crop_width,
+						crop_width);
+
 			parent->buf0filled = false;
 		}
 	}
-	/*Up&Right stripe*/
+	/* Up&Right stripe */
 	else if (stripe_mode == (UP_STRIPE | RIGHT_STRIPE)) {
 		if (!parent->buf1filled) {
-			offset_addr = t->set.o_off +
-				t->set.sp_setting.ud_split_line*t->set.ostride;
-			dmac_flush_range(base_off + offset_addr,
-					base_off + offset_addr + vdi_size);
-			outer_flush_range(t->output.paddr + offset_addr,
-					t->output.paddr + offset_addr + vdi_size);
+			offset_addr = t->set.o_off * pixwidth +
+				t->set.sp_setting.ud_split_line * t->set.ostride;
 
 			for (i = 0; i < vdi_save_lines; i++)
-				memcpy(parent->vditmpbuf[1] + i*t->output.crop.w*2,
-						base_off + offset_addr + i*t->set.ostride,
-						t->output.crop.w*2);
+				memcpy(parent->vditmpbuf[1] + i * crop_width,
+						base_off + offset_addr + i * t->set.ostride,
+						crop_width);
 			parent->buf1filled = true;
 		} else {
-			offset_addr = t->set.o_off +
-				(t->output.crop.h - vdi_save_lines)*t->set.ostride;
+			offset_addr = t->set.o_off * pixwidth +
+				(t->output.crop.h - vdi_save_lines) * t->set.ostride;
 			for (i = 0; i < vdi_save_lines; i++)
-				memcpy(base_off + offset_addr + i*t->set.ostride,
-						parent->vditmpbuf[1] + i*t->output.crop.w*2,
-						t->output.crop.w*2);
+				memcpy(base_off + offset_addr + i * t->set.ostride,
+						parent->vditmpbuf[1] + i * crop_width,
+						crop_width);
 
-			dmac_flush_range(base_off + offset_addr,
-					base_off + offset_addr + i*t->set.ostride);
-			outer_flush_range(t->output.paddr + offset_addr,
-					t->output.paddr + offset_addr + i*t->set.ostride);
 			parent->buf1filled = false;
 		}
 	}
-	/*Down stripe or Down&Right stript*/
+	/* Down stripe or Down&Right stript */
 	else if (stripe_mode == (DOWN_STRIPE | RIGHT_STRIPE)) {
 		if (!parent->buf1filled) {
-			offset_addr = t->set.o_off + vdi_save_lines*t->set.ostride;
-			dmac_flush_range(base_off + offset_addr,
-					base_off + offset_addr + vdi_save_lines*t->set.ostride);
-			outer_flush_range(t->output.paddr + offset_addr,
-					t->output.paddr + offset_addr + vdi_save_lines*t->set.ostride);
+			offset_addr = t->set.o_off * pixwidth +
+				vdi_save_lines * t->set.ostride;
 
 			for (i = 0; i < vdi_save_lines; i++)
-				memcpy(parent->vditmpbuf[1] + i*t->output.crop.w*2,
-						base_off + offset_addr + i*t->set.ostride,
-						t->output.crop.w*2);
+				memcpy(parent->vditmpbuf[1] + i * crop_width,
+						base_off + offset_addr + i * t->set.ostride,
+						crop_width);
 			parent->buf1filled = true;
 		} else {
-			offset_addr = t->set.o_off;
+			offset_addr = t->set.o_off * pixwidth;
 			for (i = 0; i < vdi_save_lines; i++)
-				memcpy(base_off + offset_addr + i*t->set.ostride,
-						parent->vditmpbuf[1] + i*t->output.crop.w*2,
-						t->output.crop.w*2);
+				memcpy(base_off + offset_addr + i * t->set.ostride,
+						parent->vditmpbuf[1] + i * crop_width,
+						crop_width);
 
-			dmac_flush_range(base_off + offset_addr,
-					base_off + offset_addr + vdi_save_lines*t->set.ostride);
-			outer_flush_range(t->output.paddr + offset_addr,
-					t->output.paddr + offset_addr + vdi_save_lines*t->set.ostride);
 			parent->buf1filled = false;
 		}
 	}
+	if (!pfn_valid(t->output.paddr >> PAGE_SHIFT))
+		iounmap(base_off);
 }
 
 static void do_task_release(struct ipu_task_entry *t, int fail)

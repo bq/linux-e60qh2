@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2012 Freescale Semiconductor, Inc.
+ * Copyright (C) 2011 Freescale Semiconductor, Inc.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -17,7 +17,8 @@
 
 struct mxc_gpu_platform_data {
 	int z160_revision;
-	int enable_mmu;
+	resource_size_t reserved_mem_base;
+	resource_size_t reserved_mem_size;
 };
 
 #endif /* __MACH_MXC_GPU_H_ */

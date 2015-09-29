@@ -683,6 +683,7 @@ static void __init imx6q_sabrelite_init_usb(void)
 	mxc_iomux_set_gpr_register(1, 13, 1, 1);
 
 	mx6_set_otghost_vbus_func(imx6q_sabrelite_usbotg_vbus);
+	mx6_usb_dr_init();
 }
 
 /* HW Initialization, if return 0, initialization is successful. */
@@ -805,7 +806,7 @@ static struct ipuv3_fb_platform_data sabrelite_fb_data[] = {
 	.disp_dev = "ldb",
 	.interface_pix_fmt = IPU_PIX_FMT_RGB666,
 	.mode_str = "LDB-XGA",
-	.default_bpp = 16,
+	.default_bpp = 32,
 	.int_clk = false,
 	}, {
 	.disp_dev = "lcd",
@@ -928,6 +929,16 @@ static struct fsl_mxc_capture_platform_data capture_data[] = {
 		.mclk_source = 0,
 		.is_mipi = 1,
 	},
+};
+
+
+struct imx_vout_mem {
+	resource_size_t res_mbase;
+	resource_size_t res_msize;
+};
+
+static struct imx_vout_mem vout_mem __initdata = {
+	.res_msize = SZ_128M,
 };
 
 
@@ -1158,13 +1169,6 @@ static void __init fixup_mxc_board(struct machine_desc *desc, struct tag *tags,
 					pdata_fb[i++].res_size[0] = memparse(str, &str);
 				}
 			}
-			/* GPU reserved memory */
-			str = t->u.cmdline.cmdline;
-			str = strstr(str, "gpumem=");
-			if (str != NULL) {
-				str += 7;
-				imx6q_gpu_pdata.reserved_mem_size = memparse(str, &str);
-			}
 			break;
 		}
 	}
@@ -1178,26 +1182,6 @@ static struct mipi_csi2_platform_data mipi_csi2_pdata = {
 	.dphy_clk = "mipi_pllref_clk",
 	.pixel_clk = "emi_clk",
 };
-
-#ifdef CONFIG_ANDROID_RAM_CONSOLE
-static struct resource ram_console_resource = {
-	.name = "android ram console",
-	.flags = IORESOURCE_MEM,
-};
-
-static struct platform_device android_ram_console = {
-	.name = "ram_console",
-	.num_resources = 1,
-	.resource = &ram_console_resource,
-};
-
-static int __init imx6x_add_ram_console(void)
-{
-	return platform_device_register(&android_ram_console);
-}
-#else
-#define imx6x_add_ram_console() do {} while (0)
-#endif
 
 static int __init caam_setup(char *__unused)
 {
@@ -1216,6 +1200,7 @@ static void __init mx6_sabrelite_board_init(void)
 	struct clk *clko2;
 	struct clk *new_parent;
 	int rate;
+	struct platform_device *voutdev;
 
 	mxc_iomux_v3_setup_multiple_pads(mx6q_sabrelite_pads,
 					ARRAY_SIZE(mx6q_sabrelite_pads));
@@ -1244,7 +1229,17 @@ static void __init mx6_sabrelite_board_init(void)
 	imx6q_add_vdoa();
 	imx6q_add_lcdif(&lcdif_data);
 	imx6q_add_ldb(&ldb_data);
-	imx6q_add_v4l2_output(0);
+	voutdev = imx6q_add_v4l2_output(0);
+	if (vout_mem.res_msize && voutdev) {
+		dma_declare_coherent_memory(&voutdev->dev,
+					    vout_mem.res_mbase,
+					    vout_mem.res_mbase,
+					    vout_mem.res_msize,
+					    (DMA_MEMORY_MAP |
+					     DMA_MEMORY_EXCLUSIVE));
+	}
+
+
 	imx6q_add_v4l2_capture(0, &capture_data[0]);
 	imx6q_add_v4l2_capture(1, &capture_data[1]);
 	imx6q_add_mipi_csi2(&mipi_csi2_pdata);
@@ -1369,16 +1364,8 @@ static void __init mx6q_sabrelite_reserve(void)
 {
 	phys_addr_t phys;
 	int i;
-
-#ifdef CONFIG_ANDROID_RAM_CONSOLE
-	phys = memblock_alloc_base(SZ_128K, SZ_4K, SZ_1G);
-	memblock_remove(phys, SZ_128K);
-	memblock_free(phys, SZ_128K);
-	ram_console_resource.start = phys;
-	ram_console_resource.end   = phys + SZ_128K - 1;
-#endif
-
 #if defined(CONFIG_MXC_GPU_VIV) || defined(CONFIG_MXC_GPU_VIV_MODULE)
+
 	if (imx6q_gpu_pdata.reserved_mem_size) {
 		phys = memblock_alloc_base(imx6q_gpu_pdata.reserved_mem_size,
 					   SZ_4K, SZ_1G);
@@ -1403,6 +1390,13 @@ static void __init mx6q_sabrelite_reserve(void)
 			memblock_remove(phys, sabrelite_fb_data[i].res_size[0]);
 			sabrelite_fb_data[i].res_base[0] = phys;
 		}
+	if (vout_mem.res_msize) {
+		phys = memblock_alloc_base(vout_mem.res_msize,
+					   SZ_4K, SZ_1G);
+		memblock_remove(phys, vout_mem.res_msize);
+		vout_mem.res_mbase = phys;
+	}
+
 }
 
 /*

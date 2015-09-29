@@ -176,6 +176,8 @@ struct fsl_usb2_wakeup_platform_data {
 	 * usb wakeup routine.
 	 */
 	bool usb_wakeup_is_pending;
+	int usb_irq;
+	int wakeup_irq;
 };
 
 /* Flags in fsl_usb2_mph_platform_data */
@@ -247,6 +249,7 @@ struct mxc_fb_platform_data {
 	int num_modes;
 	char *mode_str;
 	u32 interface_pix_fmt;
+	char *panel_type;
 };
 
 struct fsl_mxc_lcd_platform_data {

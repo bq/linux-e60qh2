@@ -259,7 +259,7 @@ static int pu_enable(struct anatop_regulator *sreg)
 	return 0;
 }
 
-static int pu_disable(struct anatop_regulator *sreg)
+int pu_disable(struct anatop_regulator *sreg)
 {
 	unsigned int reg;
 	int ret = 0;
@@ -308,6 +308,7 @@ static int pu_disable(struct anatop_regulator *sreg)
 	__raw_writel(reg, ANADIG_MISC1_REG);
 	return 0;
 }
+EXPORT_SYMBOL(pu_disable);
 static int is_pu_enabled(struct anatop_regulator *sreg)
 {
 	return pu_is_enabled;
@@ -608,6 +609,7 @@ static int __init regulators_init(void)
 	/* clear flag in boot */
 	pu_is_enabled = 0;
 	get_clk = 0;
+	pu_disable(NULL);
 	return 0;
 }
 postcore_initcall(regulators_init);

@@ -64,10 +64,10 @@ MODULE_LICENSE("GPL");
 
 #include "f_ecm.c"
 #include "f_subset.c"
-#ifdef USB_ETH_RNDIS
+//#ifdef USB_ETH_RNDIS
 #  include "f_rndis.c"
 #  include "rndis.c"
-#endif
+//#endif
 #include "u_ether.c"
 
 
@@ -162,7 +162,7 @@ static u8 hostaddr[ETH_ALEN];
 
 /********** RNDIS **********/
 
-#ifdef USB_ETH_RNDIS
+//#ifdef USB_ETH_RNDIS
 
 static __init int rndis_do_config(struct usb_configuration *c)
 {
@@ -173,9 +173,12 @@ static __init int rndis_do_config(struct usb_configuration *c)
 		c->bmAttributes |= USB_CONFIG_ATT_WAKEUP;
 	}
 
-	ret = rndis_bind_config(c, hostaddr);
+#ifdef USB_ETH_RNDIS//[
+	ret = rndis_bind_config(c, hostaddr,
+			(u32)fsg_mod_data.vendor,fsg_mod_data.manufacturer);
 	if (ret < 0)
 		return ret;
+#endif //]USB_ETH_RNDIS
 
 	ret = acm_bind_config(c, 0);
 	if (ret < 0)
@@ -201,14 +204,14 @@ static int rndis_config_register(struct usb_composite_dev *cdev)
 	return usb_add_config(cdev, &config, rndis_do_config);
 }
 
-#else
+//#else
 
-static int rndis_config_register(struct usb_composite_dev *cdev)
-{
-	return 0;
-}
+//static int rndis_config_register(struct usb_composite_dev *cdev)
+//{
+//	return 0;
+//}
 
-#endif
+//#endif
 
 
 /********** CDC ECM **********/

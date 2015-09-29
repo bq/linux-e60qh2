@@ -1,21 +1,3 @@
-/*
- * Copyright (C) 2012 Freescale Semiconductor, Inc. All Rights Reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
-
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
-
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
- */
-
 #ifndef __MACH_MX53_H__
 #define __MACH_MX53_H__
 
@@ -239,12 +221,6 @@
 #define MX53_DMA_REQ_ASRC_DMA3	34
 #define MX53_DMA_REQ_ASRC_DMA2	33
 #define MX53_DMA_REQ_ASRC_DMA1	32
-#define MX53_DMA_REQ_ASRC_TX3	37
-#define MX53_DMA_REQ_ASRC_TX2	36
-#define MX53_DMA_REQ_ASRC_TX1	35
-#define MX53_DMA_REQ_ASRC_RX3	34
-#define MX53_DMA_REQ_ASRC_RX2	33
-#define MX53_DMA_REQ_ASRC_RX1	32
 #define MX53_DMA_REQ_EMI_WR		31
 #define MX53_DMA_REQ_EMI_RD		30
 #define MX53_DMA_REQ_SSI1_TX0		29
@@ -347,7 +323,7 @@
 #define MX53_INT_I2C2	63
 #define MX53_INT_I2C3	64
 #define MX53_INT_RESV65	65
-#define MX53_INT_ASRC	66
+#define MX53_INT_RESV66	66
 #define MX53_INT_SPDIF	67
 #define MX53_INT_SIM_DAT	68
 #define MX53_INT_IIM	69
@@ -410,7 +386,6 @@
 #define MXC_IIM_MX51_BANK_END_ADDR   0x147c
 #define MXC_IIM_MX53_BANK_START_ADDR 0x0800
 #define MXC_IIM_MX53_BANK_END_ADDR   0x183c
-#define MXC_IIM_MX53_BANK_AREA_0_OFFSET 0x800
 #define MXC_IIM_MX53_BANK_AREA_1_OFFSET 0xc00
 #define MXC_IIM_MX53_MAC_ADDR_OFFSET    0x24
 

@@ -317,10 +317,10 @@ static unsigned mmc_sdio_get_max_clock(struct mmc_card *card)
 		/*
 		 * The SDIO specification doesn't mention how
 		 * the CIS transfer speed register relates to
-		 * high-speed, but it seems that 50 MHz is
+		 * high-speed, but it seems that 25 MHz is
 		 * mandatory.
 		 */
-		max_dtr = 50000000;
+		max_dtr = 25000000;
 	} else {
 		max_dtr = card->cis.max_dtr;
 	}
@@ -556,15 +556,31 @@ err:
 static void mmc_sdio_remove(struct mmc_host *host)
 {
 	int i;
+	int idx_fn1 = -1;
 
 	BUG_ON(!host);
 	BUG_ON(!host->card);
 
 	for (i = 0;i < host->card->sdio_funcs;i++) {
 		if (host->card->sdio_func[i]) {
+			if (1==host->card->sdio_func[i]->num) {
+				printk(KERN_ERR"%s: postpone fn1\n",__FUNCTION__);
+				idx_fn1=i;
+				continue;
+			}
+
+			printk(KERN_ERR"%s: remove fn%d\n",__FUNCTION__,
+					host->card->sdio_func[i]->num);
+
 			sdio_remove_func(host->card->sdio_func[i]);
 			host->card->sdio_func[i] = NULL;
 		}
+	}
+
+	if (idx_fn1 != -1) {
+		printk(KERN_ERR"%s: remove fn1 now\n",__FUNCTION__);
+		sdio_remove_func(host->card->sdio_func[idx_fn1]);
+		host->card->sdio_func[idx_fn1] = NULL;
 	}
 
 	mmc_remove_card(host->card);

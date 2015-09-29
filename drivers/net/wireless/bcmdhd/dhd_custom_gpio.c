@@ -20,7 +20,7 @@
 * software in any way with any other Broadcom software provided under a license
 * other than the GPL, without Broadcom's express prior written consent.
 *
-* $Id: dhd_custom_gpio.c 339054 2012-06-15 04:56:55Z $
+* $Id: dhd_custom_gpio.c,v 1.2.42.1 2010-10-19 00:41:09 Exp $
 */
 
 #include <typedefs.h>
@@ -48,7 +48,11 @@ int wifi_get_irq_number(unsigned long *irq_flags_ptr);
 int wifi_get_mac_addr(unsigned char *buf);
 void *wifi_get_country_code(char *ccode);
 #else
-int wifi_set_power(int on, unsigned long msec) { return -1; }
+// change for ntx wifi power control, frank lee 20130510 {
+//int wifi_set_power(int on, unsigned long msec) { return -1; }
+extern void ntx_wifi_power_ctrl (int isWifiEnable);
+int wifi_set_power(int on, unsigned long msec) { ntx_wifi_power_ctrl( on); return 0;};
+// change for ntx wifi power control, frank lee 20130510 }
 int wifi_get_irq_number(unsigned long *irq_flags_ptr) { return -1; }
 int wifi_get_mac_addr(unsigned char *buf) { return -1; }
 void *wifi_get_country_code(char *ccode) { return NULL; }
@@ -61,7 +65,8 @@ void *wifi_get_country_code(char *ccode) { return NULL; }
 extern int sdioh_mmc_irq(int irq);
 #endif /* (BCMLXSDMMC)  */
 
-#ifdef CUSTOMER_HW3
+//#ifdef CUSTOMER_HW3
+#ifdef CUSTOMER_HW2
 #include <mach/gpio.h>
 #endif
 
@@ -86,7 +91,8 @@ int dhd_customer_oob_irq_map(unsigned long *irq_flags_ptr)
 {
 	int  host_oob_irq = 0;
 
-#ifdef CUSTOMER_HW2
+//#ifdef CUSTOMER_HW2
+#if 0
 	host_oob_irq = wifi_get_irq_number(irq_flags_ptr);
 
 #else
@@ -97,22 +103,24 @@ int dhd_customer_oob_irq_map(unsigned long *irq_flags_ptr)
 #endif /* CUSTOMER_HW2 */
 
 	if (dhd_oob_gpio_num < 0) {
-		WL_ERROR(("%s: ERROR customer specific Host GPIO is NOT defined\n",
+		WL_ERROR(("%s: ERROR customer specific Host GPIO is NOT defined \n",
 			__FUNCTION__));
 		return (dhd_oob_gpio_num);
 	}
 
 	WL_ERROR(("%s: customer specific Host GPIO number is (%d)\n",
-		__FUNCTION__, dhd_oob_gpio_num));
+	         __FUNCTION__, dhd_oob_gpio_num));
 
 #if defined CUSTOMER_HW
 	host_oob_irq = MSM_GPIO_TO_INT(dhd_oob_gpio_num);
-#elif defined CUSTOMER_HW3
+#elif (defined (CUSTOMER_HW3) || defined (CUSTOMER_HW2))
 	gpio_request(dhd_oob_gpio_num, "oob irq");
 	host_oob_irq = gpio_to_irq(dhd_oob_gpio_num);
 	gpio_direction_input(dhd_oob_gpio_num);
 #endif /* CUSTOMER_HW */
 #endif /* CUSTOMER_HW2 */
+	WL_ERROR(("%s: customer specific Host GPIO irq number is (%d)\n",
+	         __FUNCTION__, host_oob_irq));
 
 	return (host_oob_irq);
 }
@@ -153,6 +161,11 @@ dhd_customer_gpio_wlan_ctrl(int onoff)
 #ifdef CUSTOMER_HW
 			bcm_wlan_power_off(1);
 #endif /* CUSTOMER_HW */
+// change for ntx wifi power control, frank lee 20130510 {
+#ifdef CUSTOMER_HW2
+			wifi_set_power(0, 0);
+#endif
+// change for ntx wifi power control, frank lee 20130510 }
 		break;
 
 		case WLAN_POWER_ON:
@@ -163,6 +176,11 @@ dhd_customer_gpio_wlan_ctrl(int onoff)
 			/* Lets customer power to get stable */
 			OSL_DELAY(200);
 #endif /* CUSTOMER_HW */
+// change for ntx wifi power control, frank lee 20130510 {
+#ifdef CUSTOMER_HW2
+			wifi_set_power(1, 0);
+#endif
+// change for ntx wifi power control, frank lee 20130510 }
 		break;
 	}
 }

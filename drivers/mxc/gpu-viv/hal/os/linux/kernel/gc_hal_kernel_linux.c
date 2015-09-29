@@ -1,6 +1,6 @@
 /****************************************************************************
 *
-*    Copyright (C) 2005 - 2013 by Vivante Corp.
+*    Copyright (C) 2005 - 2012 by Vivante Corp.
 *
 *    This program is free software; you can redistribute it and/or modify
 *    it under the terms of the GNU General Public License as published by
@@ -17,6 +17,8 @@
 *    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 *
 *****************************************************************************/
+
+
 
 
 #include "gc_hal_kernel_linux.h"
@@ -63,15 +65,15 @@ gckKERNEL_QueryVideoMemory(
 
     /* Get internal memory size and physical address. */
     Interface->u.QueryVideoMemory.internalSize = device->internalSize;
-    Interface->u.QueryVideoMemory.internalPhysical = device->internalPhysicalName;
+    Interface->u.QueryVideoMemory.internalPhysical = device->internalPhysical;
 
     /* Get external memory size and physical address. */
     Interface->u.QueryVideoMemory.externalSize = device->externalSize;
-    Interface->u.QueryVideoMemory.externalPhysical = device->externalPhysicalName;
+    Interface->u.QueryVideoMemory.externalPhysical = device->externalPhysical;
 
     /* Get contiguous memory size and physical address. */
     Interface->u.QueryVideoMemory.contiguousSize = device->contiguousSize;
-    Interface->u.QueryVideoMemory.contiguousPhysical = device->contiguousPhysicalName;
+    Interface->u.QueryVideoMemory.contiguousPhysical = device->contiguousPhysical;
 
     /* Success. */
     gcmkFOOTER_NO();
@@ -179,10 +181,7 @@ gckKERNEL_MapMemory(
     OUT gctPOINTER * Logical
     )
 {
-    gckKERNEL kernel = Kernel;
-    gctPHYS_ADDR physical = gcmNAME_TO_PTR(Physical);
-
-    return gckOS_MapMemory(Kernel->os, physical, Bytes, Logical);
+    return gckOS_MapMemory(Kernel->os, Physical, Bytes, Logical);
 }
 
 /*******************************************************************************
@@ -217,10 +216,7 @@ gckKERNEL_UnmapMemory(
     IN gctPOINTER Logical
     )
 {
-    gckKERNEL kernel = Kernel;
-    gctPHYS_ADDR physical = gcmNAME_TO_PTR(Physical);
-
-    return gckOS_UnmapMemory(Kernel->os, physical, Bytes, Logical);
+    return gckOS_UnmapMemory(Kernel->os, Physical, Bytes, Logical);
 }
 
 /*******************************************************************************

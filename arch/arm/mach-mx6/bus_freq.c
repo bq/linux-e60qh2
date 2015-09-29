@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2012 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright (C) 2011-2013 Freescale Semiconductor, Inc. All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -47,7 +47,7 @@
 #include <linux/suspend.h>
 
 #define LPAPM_CLK		24000000
-#define DDR_AUDIO_CLK	50000000
+#define DDR_AUDIO_CLK	100000000
 #define DDR_MED_CLK		400000000
 #define DDR3_NORMAL_CLK		528000000
 #define GPC_PGC_GPU_PGCR_OFFSET	0x260
@@ -78,16 +78,22 @@ unsigned int ddr_normal_rate;
 int low_freq_bus_used(void);
 void set_ddr_freq(int ddr_freq);
 void *mx6sl_wfi_iram_base;
-void (*mx6sl_wfi_iram)(int arm_podf, unsigned long wfi_iram_addr) = NULL;
+unsigned long mx6sl_wfi_iram_phys_addr;
+
+void (*mx6sl_wfi_iram)(int arm_podf, unsigned long wfi_iram_addr,\
+		int audio_mode) = NULL;
 extern void mx6sl_wait (int arm_podf, unsigned long wfi_iram_addr);
 
 void *mx6sl_ddr_freq_base;
+unsigned long mx6sl_ddr_freq_phys_addr;
 void (*mx6sl_ddr_freq_change_iram)(int ddr_freq, int low_bus_freq_mode) = NULL;
 extern void mx6sl_ddr_iram(int ddr_freq);
 
 extern int init_mmdc_settings(void);
 extern struct cpu_op *(*get_cpu_op)(int *op);
 extern int update_ddr_freq(int ddr_rate);
+extern unsigned long save_ttbr1(void);
+extern void restore_ttbr1(u32 ttbr1);
 extern int chip_rev;
 
 DEFINE_MUTEX(bus_freq_mutex);
@@ -166,17 +172,30 @@ void reduce_bus_freq(void)
 				clk_round_rate(ahb_clk, LPAPM_CLK));
 		}
 		if (lp_audio_freq) {
-			/* PLL2 is on in this mode, as DDR is at 50MHz. */
+			u32 ttbr1;
+			/* PLL2 is on in this mode, as DDR is at 100MHz. */
 			/* Now change DDR freq while running from IRAM. */
 
+			/* Set AHB to 24MHz. */
+			clk_set_rate(ahb_clk,
+				clk_round_rate(ahb_clk, LPAPM_CLK / 3));
+
 			spin_lock_irqsave(&freq_lock, flags);
+			/* sync the outer cache. */
+			outer_sync();
+
+			/* Save TTBR1 */
+			ttbr1 = save_ttbr1();
+
 			mx6sl_ddr_freq_change_iram(DDR_AUDIO_CLK,
 							low_bus_freq_mode);
+			restore_ttbr1(ttbr1);
+
 			spin_unlock_irqrestore(&freq_lock, flags);
 
 			if (low_bus_freq_mode) {
 				/* Swtich ARM to run off PLL2_PFD2_400MHz
-				 * since DDR is anway at 50MHz.
+				 * since DDR is anyway at 100MHz.
 				 */
 				clk_set_parent(pll1_sw_clk, pll2_400);
 
@@ -194,6 +213,7 @@ void reduce_bus_freq(void)
 			low_bus_freq_mode = 0;
 			audio_bus_freq_mode = 1;
 		} else {
+			u32 ttbr1;
 			/* Set MMDC clk to 24MHz. */
 			/* Since we are going to set PLL2 in bypass mode,
 			  * move the CPU clock off PLL2.
@@ -215,9 +235,15 @@ void reduce_bus_freq(void)
 			clk_set_parent(pll1_sw_clk, pll1);
 
 			spin_lock_irqsave(&freq_lock, flags);
+			/* sync the outer cache. */
+			outer_sync();
+
+			ttbr1 = save_ttbr1();
 			/* Now change DDR freq while running from IRAM. */
 			mx6sl_ddr_freq_change_iram(LPAPM_CLK,
 					low_bus_freq_mode);
+			restore_ttbr1(ttbr1);
+
 			spin_unlock_irqrestore(&freq_lock, flags);
 
 			low_bus_freq_mode = 1;
@@ -269,7 +295,7 @@ int set_low_bus_freq(void)
 	if (!bus_freq_scaling_initialized || !bus_freq_scaling_is_active)
 		return 0;
 
-	/* Check to see if we need to got from
+	/* Check to see if we need to get from
 	  * low bus freq mode to audio bus freq mode.
 	  * If so, the change needs to be done immediately.
 	  */
@@ -281,7 +307,7 @@ int set_low_bus_freq(void)
 		  * the conditions still remain the same.
 		  */
 		schedule_delayed_work(&low_bus_freq_handler,
-					usecs_to_jiffies(3000000));
+					usecs_to_jiffies(500000));
 	return 0;
 }
 
@@ -325,10 +351,19 @@ int set_high_bus_freq(int high_bus_freq)
 	if (cpu_is_mx6sl()) {
 		u32 reg;
 		unsigned long flags;
+		u32 ttbr1;
 
 		spin_lock_irqsave(&freq_lock, flags);
+		/* sync the outer cache. */
+		outer_sync();
+
+		ttbr1 = save_ttbr1();
+
 		/* Change DDR freq in IRAM. */
 		mx6sl_ddr_freq_change_iram(ddr_normal_rate, low_bus_freq_mode);
+
+		restore_ttbr1(ttbr1);
+
 		spin_unlock_irqrestore(&freq_lock, flags);
 
 		/* Set periph_clk to be sourced from pll2_pfd2_400M */
@@ -416,7 +451,7 @@ void bus_freq_update(struct clk *clk, bool flag)
 			  */
 			high_cpu_freq = 1;
 			if (low_bus_freq_mode || audio_bus_freq_mode)
-				set_high_bus_freq(1);
+				set_high_bus_freq(0);
 		} else {
 			/* Update count */
 			if (clk->flags & AHB_HIGH_SET_POINT)
@@ -475,7 +510,7 @@ void bus_freq_update(struct clk *clk, bool flag)
 					/* Set to either high or
 					  * medium setpoint.
 					  */
-					set_high_bus_freq(1);
+					set_high_bus_freq(0);
 				}
 			}
 		}
@@ -510,7 +545,7 @@ static ssize_t bus_freq_scaling_enable_store(struct device *dev,
 #else
 		bus_freq_scaling_is_active = 1;
 #endif
-		set_high_bus_freq(1);
+		set_high_bus_freq(0);
 		/* Make sure system can enter low bus mode if it should be in
 		low bus mode */
 		if (low_freq_bus_used() && !low_bus_freq_mode)
@@ -719,31 +754,31 @@ static int __devinit busfreq_probe(struct platform_device *pdev)
 	if (!cpu_is_mx6sl())
 		init_mmdc_settings();
 	else {
-		unsigned long iram_paddr;
+		/* Use preallocated memory */
+		mx6sl_wfi_iram_phys_addr = MX6SL_WFI_IRAM_CODE;
 
-		/* Allocate IRAM for WFI code when system is
-		  * in low freq mode.
-		  */
-		iram_alloc(SZ_4K, &iram_paddr);
-		/* Need to remap the area here since we want
-		   * the memory region to be executable.
-		   */
-		mx6sl_wfi_iram_base = __arm_ioremap(iram_paddr,
-						SZ_4K, MT_MEMORY_NONCACHED);
-		memcpy(mx6sl_wfi_iram_base, mx6sl_wait, SZ_4K);
+		/*
+		 * Don't ioremap the address, we have fixed the IRAM address
+		 * at IRAM_BASE_ADDR_VIRT
+		 */
+		mx6sl_wfi_iram_base = (void *)IRAM_BASE_ADDR_VIRT +
+			(mx6sl_wfi_iram_phys_addr - IRAM_BASE_ADDR);
+
+		memcpy(mx6sl_wfi_iram_base, mx6sl_wait, MX6SL_WFI_IRAM_CODE_SIZE);
 		mx6sl_wfi_iram = (void *)mx6sl_wfi_iram_base;
 
-		/* Allocate IRAM for WFI code when system is
-		  *in low freq mode.
-		  */
-		iram_alloc(SZ_4K, &iram_paddr);
-		/* Need to remap the area here since we want the memory region
-			 to be executable. */
-		mx6sl_ddr_freq_base = __arm_ioremap(iram_paddr,
-					SZ_4K, MT_MEMORY_NONCACHED);
-		memcpy(mx6sl_ddr_freq_base, mx6sl_ddr_iram, SZ_4K);
-		mx6sl_ddr_freq_change_iram = (void *)mx6sl_ddr_freq_base;
+		/* Use preallocated memory */
+		mx6sl_ddr_freq_phys_addr = MX6_DDR_FREQ_IRAM_CODE;
 
+		/*
+		 * Don't ioremap the address, we have fixed the IRAM address
+		 * at IRAM_BASE_ADDR_VIRT
+		 */
+		mx6sl_ddr_freq_base = (void *)IRAM_BASE_ADDR_VIRT +
+			(mx6sl_ddr_freq_phys_addr - IRAM_BASE_ADDR);
+
+		memcpy(mx6sl_ddr_freq_base, mx6sl_ddr_iram, MX6SL_DDR_FREQ_CODE_SIZE);
+		mx6sl_ddr_freq_change_iram = (void *)mx6sl_ddr_freq_base;
 	}
 
 	return 0;

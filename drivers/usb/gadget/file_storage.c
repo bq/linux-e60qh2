@@ -276,7 +276,9 @@
 #define DRIVER_VERSION		"1 September 2010"
 
 static       char fsg_string_manufacturer[64];
-static const char fsg_string_product[] = DRIVER_DESC;
+//static const char fsg_string_product[] = DRIVER_DESC;
+static const char fsg_string_product[40];
+static       char fsg_string_serial[13];
 static const char fsg_string_config[] = "Self-powered";
 static const char fsg_string_interface[] = "Mass Storage";
 
@@ -325,7 +327,12 @@ static struct {
 	char		*transport_name;
 	int		protocol_type;
 	char		*protocol_name;
-
+	// Joseph 100316
+	char		*vendor_id;
+	char		*product_id;
+	char		*desc_p;
+	char		*desc_m;
+	char		*serial_no;
 } mod_data = {					// Default values
 	.transport_parm		= "BBB",
 	.protocol_parm		= "SCSI",
@@ -336,6 +343,11 @@ static struct {
 	.product		= FSG_PRODUCT_ID,
 	.release		= 0xffff,	// Use controller chip type
 	.buflen			= 16384,
+	// Joseph 100316
+	.vendor_id		= "Linux   ",
+	.product_id		= "File-Stor Gadget",
+	.serial_no		= "0123456789ABCDEF01",
+	
 	};
 
 
@@ -387,6 +399,23 @@ MODULE_PARM_DESC(release, "USB release number");
 
 module_param_named(buflen, mod_data.buflen, uint, S_IRUGO);
 MODULE_PARM_DESC(buflen, "I/O buffer size");
+
+// Joseph 100316
+module_param_named(vendor_id, mod_data.vendor_id, charp, S_IRUGO);
+MODULE_PARM_DESC(vendor, "USB Vendor ID string");
+
+module_param_named(product_id, mod_data.product_id, charp, S_IRUGO);
+MODULE_PARM_DESC(product, "USB Product ID string");
+
+module_param_named(desp_m, mod_data.desc_m, charp, S_IRUGO);
+MODULE_PARM_DESC(vendor, "USB descriptor M string");
+
+module_param_named(desp_p, mod_data.desc_p, charp, S_IRUGO);
+MODULE_PARM_DESC(product, "USB descriptor P string");
+
+module_param_named(SN, mod_data.serial_no, charp, S_IRUGO);
+MODULE_PARM_DESC(product, "serial no string");
+
 
 #endif /* CONFIG_USB_FILE_STORAGE_TEST */
 
@@ -498,6 +527,7 @@ struct fsg_dev {
 #include "fsl_updater.h"
 #endif
 
+static int do_set_interface(struct fsg_dev *fsg, int altsetting);
 typedef void (*fsg_routine_t)(struct fsg_dev *);
 
 static int exception_in_progress(struct fsg_dev *fsg)
@@ -676,6 +706,14 @@ static void fsg_disconnect(struct usb_gadget *gadget)
 	struct fsg_dev		*fsg = get_gadget_data(gadget);
 
 	DBG(fsg, "disconnect or port reset\n");
+	/*
+	 * The disconnect exception will call do_set_config, and therefore will
+	 * visit controller registers. However it is a delayed event, and will be
+	 * handled at another process, so the controller maybe have already closed the
+	 * usb clock.
+	 */
+	if (fsg->new_config)
+		do_set_interface(fsg, -1);/* disable the interface */
 	raise_exception(fsg, FSG_STATE_DISCONNECT);
 }
 
@@ -1577,8 +1615,14 @@ static int do_inquiry(struct fsg_dev *fsg, struct fsg_buffhd *bh)
 {
 	u8	*buf = (u8 *) bh->buf;
 
+#if 0	// Joseph 100315
 	static char vendor_id[] = "Linux   ";
 	static char product_disk_id[] = "File-Stor Gadget";
+#else
+	static char vendor_id[] = "        ";
+	static char product_disk_id[] = "                ";
+#endif	
+
 	static char product_cdrom_id[] = "File-CD Gadget  ";
 
 	if (!fsg->curlun) {		// Unsupported LUNs are okay
@@ -1597,6 +1641,19 @@ static int do_inquiry(struct fsg_dev *fsg, struct fsg_buffhd *bh)
 	buf[3] = 2;		// SCSI-2 INQUIRY data format
 	buf[4] = 31;		// Additional length
 				// No special options
+
+	// Joseph 100315 //[
+	if ( 8 > strlen (mod_data.vendor_id))
+		memcpy (vendor_id, mod_data.vendor_id, strlen (mod_data.vendor_id));
+	else
+		memcpy (vendor_id, mod_data.vendor_id, 8);
+	
+	if ( 16 > strlen (mod_data.product_id))
+		memcpy (product_disk_id, mod_data.product_id, strlen (mod_data.product_id));
+	else
+		memcpy (product_disk_id, mod_data.product_id, 16);
+	//] Joseph 100315
+				 
 	sprintf(buf + 8, "%-8s%-16s%04x", vendor_id,
 			(mod_data.cdrom ? product_cdrom_id :
 				product_disk_id),
@@ -1835,7 +1892,7 @@ static int do_start_stop(struct fsg_dev *fsg)
 	loej = fsg->cmnd[4] & 0x02;
 	start = fsg->cmnd[4] & 0x01;
 
-#ifdef CONFIG_USB_FILE_STORAGE_TEST
+//#ifdef CONFIG_USB_FILE_STORAGE_TEST
 	if ((fsg->cmnd[1] & ~0x01) != 0 ||		// Mask away Immed
 			(fsg->cmnd[4] & ~0x03) != 0) {	// Mask LoEj, Start
 		curlun->sense_data = SS_INVALID_FIELD_IN_CDB;
@@ -1856,6 +1913,7 @@ static int do_start_stop(struct fsg_dev *fsg)
 			fsg_lun_close(curlun);
 			up_write(&fsg->filesem);
 			down_read(&fsg->filesem);
+			kobject_uevent_env(&fsg->gadget->dev.parent->kobj, KOBJ_OFFLINE, NULL);
 		}
 	} else {
 
@@ -1866,7 +1924,7 @@ static int do_start_stop(struct fsg_dev *fsg)
 			return -EINVAL;
 		}
 	}
-#endif
+//#endif
 	return 0;
 }
 
@@ -3235,6 +3293,9 @@ static int __init check_parameters(struct fsg_dev *fsg)
 		mod_data.can_stall = 0;
 
 	if (mod_data.release == 0xffff) {	// Parameter wasn't set
+#if 1	// Joseph 20100903 for Calibre
+		mod_data.release = 0x0110;
+#else
 		gcnum = usb_gadget_controller_number(fsg->gadget);
 		if (gcnum >= 0)
 			mod_data.release = 0x0300 + gcnum;
@@ -3243,6 +3304,7 @@ static int __init check_parameters(struct fsg_dev *fsg)
 				fsg->gadget->name);
 			mod_data.release = 0x0399;
 		}
+#endif //] Joseph 20100903 for Calibre
 	}
 
 	prot = simple_strtol(mod_data.protocol_parm, NULL, 0);
@@ -3526,11 +3588,39 @@ static int __ref fsg_bind(struct usb_gadget *gadget)
 
 	/* This should reflect the actual gadget power source */
 	usb_gadget_set_selfpowered(gadget);
-
+	if (mod_data.desc_p && strlen (mod_data.desc_p))// Joseph 20100921
+		strcpy (fsg_string_product, mod_data.desc_p);
+	else if (mod_data.product_id && strlen (mod_data.product_id))// Joseph 20100827
+		strcpy (fsg_string_product, mod_data.product_id);
+	else
+		strcpy (fsg_string_product, DRIVER_DESC);
+	
+	if (mod_data.desc_m && strlen (mod_data.desc_m))// Joseph 20100921
+		strcpy (fsg_string_manufacturer, mod_data.desc_m);
+	else if (mod_data.vendor_id && strlen (mod_data.vendor_id))
+		strcpy (fsg_string_manufacturer, mod_data.vendor_id);
+	else
 	snprintf(fsg_string_manufacturer, sizeof fsg_string_manufacturer,
 			"%s %s with %s",
 			init_utsname()->sysname, init_utsname()->release,
 			gadget->name);
+
+	if (mod_data.serial_no && strlen (mod_data.serial_no))// Joseph 100921
+		strcpy (fsg_string_serial, mod_data.serial_no);
+	else {
+	/* On a real device, serial[] would be loaded from permanent
+	 * storage.  We just encode it from the driver version string. */
+	for (i = 0; i < sizeof fsg_string_serial - 2; i += 2) {
+		unsigned char		c = DRIVER_VERSION[i / 2];
+
+		if (!c)
+			break;
+		sprintf(&fsg_string_serial[i], "%02X", c);
+	}
+	}
+	fsg_strings[FSG_STRING_SERIAL - 1].s = fsg_string_serial;
+	device_desc.iSerialNumber = FSG_STRING_SERIAL;
+	printk ("[%s-%d] mfg = %s , SN = %s\n",__func__, __LINE__, fsg_string_manufacturer, fsg_string_serial);
 
 	fsg->thread_task = kthread_create(fsg_main_thread, fsg,
 			"file-storage-gadget");

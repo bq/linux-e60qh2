@@ -29,6 +29,7 @@
 		.iosize = size,						\
 	}
 
+#ifdef CONFIG_IMX_HAVE_PLATFORM_IMX_ELCDIF //[
 #ifdef CONFIG_SOC_IMX6SL
 const struct imx_elcdif_data imx6dl_elcdif_data __initconst =
 			imx_elcdif_data_entry_single(MX6DL, SZ_16K);
@@ -53,4 +54,5 @@ struct platform_device *__init imx_add_imx_elcdif(
 	return imx_add_platform_device_dmamask("mxc_elcdif_fb", -1,
 		res, ARRAY_SIZE(res), pdata, sizeof(*pdata), DMA_BIT_MASK(32));
 }
+#endif //]CONFIG_IMX_HAVE_PLATFORM_IMX_ELCDIF
 

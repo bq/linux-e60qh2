@@ -82,3 +82,4 @@ extern void __iomem *imx_otg_base;
 			  .iobase = soc ## _USB_OTG_BASE_ADDR, \
 			  .irq = soc ## _INT_USB_OTG,			  \
 		  }
+

@@ -15,6 +15,7 @@ enum cd_types {
 	ESDHC_CD_CONTROLLER,    /* mmc controller internal CD */
 	ESDHC_CD_GPIO,          /* external gpio pin for CD */
 	ESDHC_CD_PERMANENT,     /* no CD, card permanently wired to host */
+	ESDHC_CD_WIFI_PWR,		/* wifi host, use wifi pwr pin as CD */
 };
 
 /**

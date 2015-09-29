@@ -76,3 +76,11 @@ config MMC_TEST
 
 	  This driver is only of interest to those developing or
 	  testing a host driver. Most people should say N here.
+config SDIO_WIFI_PWR
+	tristate "Netronix wifi power control"
+	default m
+	help
+	  This provides an interface to control sdio wifi power,
+	  say M here.
+
+	  If unsure, say N.

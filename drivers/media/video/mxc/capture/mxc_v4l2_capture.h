@@ -201,7 +201,6 @@ typedef struct _cam_data {
 	unsigned int ipu_id;
 	unsigned int csi;
 	u8 mclk_source;
-	bool mclk_on[2];	/* two mclk sources at most now */
 	int current_input;
 
 	int local_buf_num;

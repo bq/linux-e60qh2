@@ -191,7 +191,7 @@ static inline int device_in_white_list(struct usb_device *udev)
 		/* It's possible that a config has no interfaces! */
 		if (c->desc.bNumInterfaces > 0)
 			desc = &c->intf_cache[0]->altsetting->desc;
-
+ 
 		if (desc && !in_white_list((u8)desc->bInterfaceClass))
 			continue;
 

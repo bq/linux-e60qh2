@@ -27,7 +27,6 @@
 #include <linux/fsl_devices.h>
 #include <linux/slab.h>
 #include <linux/clk.h>
-#include <linux/switch.h>
 #include <linux/kthread.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
@@ -54,7 +53,6 @@ struct imx_priv {
 	int amic_irq;
 	int amic_status;
 	struct platform_device *pdev;
-	struct switch_dev sdev;
 	struct snd_pcm_substream *first_stream;
 	struct snd_pcm_substream *second_stream;
 };
@@ -66,7 +64,7 @@ static struct snd_soc_codec *gcodec;
 static struct snd_soc_jack imx_hp_jack;
 static struct snd_soc_jack_pin imx_hp_jack_pins[] = {
 	{
-		.pin = "Headphone Jack",
+		.pin = "Ext Spk",
 		.mask = SND_JACK_HEADPHONE,
 	},
 };
@@ -117,6 +115,56 @@ static void imx_hifi_shutdown(struct snd_pcm_substream *substream)
 	return;
 }
 
+static int check_hw_params(struct snd_pcm_substream *substream,
+				struct snd_pcm_hw_params *params)
+{
+	struct imx_priv *priv = &card_priv;
+	unsigned int channels = params_channels(params);
+	unsigned int sample_rate = params_rate(params);
+	snd_pcm_format_t sample_format = params_format(params);
+
+	substream->runtime->sample_bits =
+		snd_pcm_format_physical_width(sample_format);
+	substream->runtime->rate = sample_rate;
+	substream->runtime->format = sample_format;
+	substream->runtime->channels = channels;
+
+	if (!priv->first_stream) {
+		priv->first_stream = substream;
+	} else {
+		priv->second_stream = substream;
+
+		/* Check two sample rates of two streams */
+		if (priv->first_stream->runtime->rate !=
+				priv->second_stream->runtime->rate) {
+			pr_err("\n!KEEP THE SAME SAMPLE RATE: %d!\n",
+					priv->first_stream->runtime->rate);
+			return -EINVAL;
+		}
+
+		/* Check two sample bits of two streams */
+		if (priv->first_stream->runtime->sample_bits !=
+				priv->second_stream->runtime->sample_bits) {
+			snd_pcm_format_t first_format =
+				priv->first_stream->runtime->format;
+
+			pr_err("\n!KEEP THE SAME FORMAT: %s!\n",
+					snd_pcm_format_name(first_format));
+			return -EINVAL;
+		}
+
+		/* Check two channel numbers of two streams */
+		if (priv->first_stream->runtime->channels !=
+				priv->second_stream->runtime->channels) {
+			pr_err("\n!KEEP THE SAME CHANNEL NUMBER: %d!\n",
+					priv->first_stream->runtime->channels);
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
 static int imx_hifi_hw_params(struct snd_pcm_substream *substream,
 				     struct snd_pcm_hw_params *params)
 {
@@ -130,10 +178,17 @@ static int imx_hifi_hw_params(struct snd_pcm_substream *substream,
 	u32 dai_format;
 	unsigned int pll_out;
 
-	if (!priv->first_stream)
-		priv->first_stream = substream;
-	else
-		priv->second_stream = substream;
+	/*
+	 * WM8962 doesn't support two substreams in different parameters
+	 * (i.e. different sample rates, audio formats, channel numbers)
+	 * So we here check the three parameters above of two substreams
+	 * if they are running in the same time.
+	 */
+	ret = check_hw_params(substream, params);
+	if (ret < 0) {
+		pr_err("Failed to match hw params: %d\n", ret);
+		return ret;
+	}
 
 	dai_format = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
 		SND_SOC_DAIFMT_CBM_CFM;
@@ -262,25 +317,17 @@ static void imx_resume_event(struct work_struct *wor)
 	return;
 }
 
-static int hp_jack_status_check(void)
+static int imx_event_hp(struct snd_soc_dapm_widget *w,
+				struct snd_kcontrol *kcontrol, int event)
 {
 	struct imx_priv *priv = &card_priv;
 	struct platform_device *pdev = priv->pdev;
 	struct mxc_audio_platform_data *plat = pdev->dev.platform_data;
 	char *envp[3];
 	char *buf;
-	int  ret = 0;
 
 	if (plat->hp_gpio != -1) {
 		priv->hp_status = gpio_get_value(plat->hp_gpio);
-
-		/* if headphone is inserted, disable speaker */
-		if (priv->hp_status != plat->hp_active_low)
-			snd_soc_dapm_nc_pin(&gcodec->dapm, "Ext Spk");
-		else
-			snd_soc_dapm_enable_pin(&gcodec->dapm, "Ext Spk");
-
-		snd_soc_dapm_sync(&gcodec->dapm);
 
 		buf = kmalloc(32, GFP_ATOMIC);
 		if (!buf) {
@@ -288,14 +335,11 @@ static int hp_jack_status_check(void)
 			return -ENOMEM;
 		}
 
-		if (priv->hp_status != plat->hp_active_low) {
-			switch_set_state(&priv->sdev, 2);
+		if (priv->hp_status != plat->hp_active_low)
 			snprintf(buf, 32, "STATE=%d", 2);
-			ret = imx_hp_jack_gpio.report;
-		} else {
-			switch_set_state(&priv->sdev, 0);
+		else
 			snprintf(buf, 32, "STATE=%d", 0);
-		}
+
 		envp[0] = "NAME=headphone";
 		envp[1] = buf;
 		envp[2] = NULL;
@@ -303,15 +347,53 @@ static int hp_jack_status_check(void)
 		kfree(buf);
 	}
 
-	return ret;
+	return 0;
 }
+
+static int imx_event_mic(struct snd_soc_dapm_widget *w,
+				struct snd_kcontrol *kcontrol, int event)
+{
+	struct imx_priv *priv = &card_priv;
+	struct platform_device *pdev = priv->pdev;
+	struct mxc_audio_platform_data *plat = pdev->dev.platform_data;
+	char *envp[3];
+	char *buf;
+
+	if (plat->mic_gpio != -1) {
+		priv->amic_status = gpio_get_value(plat->mic_gpio);
+
+		buf = kmalloc(32, GFP_ATOMIC);
+		if (!buf) {
+			pr_err("%s kmalloc failed\n", __func__);
+			return -ENOMEM;
+		}
+
+		if (priv->amic_status == 0)
+			snprintf(buf, 32, "STATE=%d", 2);
+		else
+			snprintf(buf, 32, "STATE=%d", 0);
+
+		envp[0] = "NAME=amic";
+		envp[1] = buf;
+		envp[2] = NULL;
+		kobject_uevent_env(&pdev->dev.kobj, KOBJ_CHANGE, envp);
+		kfree(buf);
+	}
+
+	return 0;
+}
+
+
+static const struct snd_kcontrol_new controls[] = {
+	SOC_DAPM_PIN_SWITCH("Ext Spk"),
+};
 
 /* imx card dapm widgets */
 static const struct snd_soc_dapm_widget imx_dapm_widgets[] = {
 	SND_SOC_DAPM_HP("Headphone Jack", NULL),
-	SND_SOC_DAPM_SPK("Ext Spk", NULL),
+	SND_SOC_DAPM_SPK("Ext Spk", imx_event_hp),
 	SND_SOC_DAPM_MIC("AMIC", NULL),
-	SND_SOC_DAPM_MIC("DMIC", NULL),
+	SND_SOC_DAPM_MIC("DMIC", imx_event_mic),
 };
 
 /* imx machine connections to the codec pins */
@@ -335,9 +417,6 @@ static ssize_t show_headphone(struct device_driver *dev, char *buf)
 	struct imx_priv *priv = &card_priv;
 	struct platform_device *pdev = priv->pdev;
 	struct mxc_audio_platform_data *plat = pdev->dev.platform_data;
-
-	if (plat->hp_gpio == -1)
-		return 0;
 
 	/* determine whether hp is plugged in */
 	priv->hp_status = gpio_get_value(plat->hp_gpio);
@@ -405,14 +484,12 @@ static int imx_wm8962_init(struct snd_soc_pcm_runtime *rtd)
 	/* Set up imx specific audio path audio_map */
 	snd_soc_dapm_add_routes(&codec->dapm, audio_map, ARRAY_SIZE(audio_map));
 
-	snd_soc_dapm_enable_pin(&codec->dapm, "Ext Spk");
+	snd_soc_dapm_enable_pin(&codec->dapm, "Headphone Jack");
 	snd_soc_dapm_enable_pin(&codec->dapm, "AMIC");
 
 	if (plat->hp_gpio != -1) {
 		imx_hp_jack_gpio.gpio = plat->hp_gpio;
-		imx_hp_jack_gpio.jack_status_check = hp_jack_status_check;
-
-		snd_soc_jack_new(codec, "Headphone Jack", SND_JACK_HEADPHONE,
+		snd_soc_jack_new(codec, "Ext Spk", SND_JACK_LINEOUT,
 				&imx_hp_jack);
 		snd_soc_jack_add_pins(&imx_hp_jack,
 					ARRAY_SIZE(imx_hp_jack_pins),
@@ -426,14 +503,6 @@ static int imx_wm8962_init(struct snd_soc_pcm_runtime *rtd)
 			ret = -EINVAL;
 			return ret;
 		}
-
-		priv->hp_status = gpio_get_value(plat->hp_gpio);
-
-		/* if headphone is inserted, disable speaker */
-		if (priv->hp_status != plat->hp_active_low)
-			snd_soc_dapm_nc_pin(&codec->dapm, "Ext Spk");
-		else
-			snd_soc_dapm_enable_pin(&codec->dapm, "Ext Spk");
 	}
 
 	if (plat->mic_gpio != -1) {
@@ -455,8 +524,6 @@ static int imx_wm8962_init(struct snd_soc_pcm_runtime *rtd)
 	} else {
 		snd_soc_dapm_nc_pin(&codec->dapm, "DMIC");
 	}
-
-	snd_soc_dapm_sync(&codec->dapm);
 
 	snd_soc_dapm_sync(&codec->dapm);
 
@@ -532,20 +599,6 @@ static int __devinit imx_wm8962_probe(struct platform_device *pdev)
 
 	priv->sysclk = plat->sysclk;
 
-	priv->sdev.name = "h2w";
-	ret = switch_dev_register(&priv->sdev);
-	if (ret < 0) {
-		ret = -EINVAL;
-		return ret;
-	}
-
-	if (plat->hp_gpio != -1) {
-		priv->hp_status = gpio_get_value(plat->hp_gpio);
-		if (priv->hp_status != plat->hp_active_low)
-			switch_set_state(&priv->sdev, 2);
-		else
-			switch_set_state(&priv->sdev, 0);
-	}
 	priv->first_stream = NULL;
 	priv->second_stream = NULL;
 
@@ -557,12 +610,8 @@ static int __devexit imx_wm8962_remove(struct platform_device *pdev)
 	struct mxc_audio_platform_data *plat = pdev->dev.platform_data;
 	struct imx_priv *priv = &card_priv;
 
-	plat->clock_enable(0);
-
 	if (plat->finit)
 		plat->finit();
-
-	switch_dev_unregister(&priv->sdev);
 
 	if (priv->hp_irq)
 		free_irq(priv->hp_irq, priv);

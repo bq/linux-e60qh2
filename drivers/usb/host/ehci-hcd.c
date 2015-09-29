@@ -48,7 +48,6 @@
 #include <asm/system.h>
 #include <asm/unaligned.h>
 
-
 #ifdef CONFIG_FSL_USB_TEST_MODE
 static u32 single_step_desc_data_on;
 void set_single_step_desc_data_on(void)
@@ -993,7 +992,7 @@ static int ehci_urb_enqueue (
 		}
 #else
 		if (!qh_urb_transaction(ehci, urb, &qtd_list, mem_flags))
-			return -ENOMEM;
+ 			return -ENOMEM;
 #endif
 		return submit_async(ehci, urb, &qtd_list, mem_flags);
 

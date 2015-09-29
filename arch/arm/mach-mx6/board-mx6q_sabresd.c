@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2013 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright (C) 2012 Freescale Semiconductor, Inc. All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -83,10 +83,8 @@
 #include "cpu_op-mx6.h"
 #include "board-mx6q_sabresd.h"
 #include "board-mx6dl_sabresd.h"
-#include <mach/imx_rfkill.h>
 
 #define SABRESD_USR_DEF_GRN_LED	IMX_GPIO_NR(1, 1)
-#define SABRESD_BT_RESET	IMX_GPIO_NR(1, 2)
 #define SABRESD_USR_DEF_RED_LED	IMX_GPIO_NR(1, 2)
 #define SABRESD_VOLUME_UP	IMX_GPIO_NR(1, 4)
 #define SABRESD_VOLUME_DN	IMX_GPIO_NR(1, 5)
@@ -210,11 +208,12 @@
 
 static struct clk *sata_clk;
 static struct clk *clko;
-static int mma8451_position;
-static int mag3110_position = 1;
+static int mma8451_position = 1;
+static int mag3110_position = 2;
 static int max11801_mode = 1;
+static int enable_lcd_ldb;
+
 static int caam_enabled;
-static int uart5_enabled;
 
 extern char *gp_reg_id;
 extern char *soc_reg_id;
@@ -240,7 +239,6 @@ static const struct esdhc_platform_data mx6q_sabresd_sd3_data __initconst = {
 	.support_8bit = 1,
 	.delay_line = 0,
 	.cd_type = ESDHC_CD_CONTROLLER,
-	.runtime_pm = 1,
 };
 
 static const struct esdhc_platform_data mx6q_sabresd_sd4_data __initconst = {
@@ -256,12 +254,6 @@ static const struct anatop_thermal_platform_data
 		.name = "anatop_thermal",
 };
 
-static const struct imxuart_platform_data mx6q_sd_uart5_data __initconst = {
-	.flags      = IMXUART_HAVE_RTSCTS,
-	.dma_req_rx = MX6Q_DMA_REQ_UART5_RX,
-	.dma_req_tx = MX6Q_DMA_REQ_UART5_TX,
-};
-
 static inline void mx6q_sabresd_init_uart(void)
 {
 	imx6q_add_imx_uart(2, NULL);
@@ -271,16 +263,6 @@ static inline void mx6q_sabresd_init_uart(void)
 static int mx6q_sabresd_fec_phy_init(struct phy_device *phydev)
 {
 	unsigned short val;
-
-	/* Ar8031 phy SmartEEE feature cause link status generates glitch,
-	 * which cause ethernet link down/up issue, so disable SmartEEE
-	 */
-	phy_write(phydev, 0xd, 0x3);
-	phy_write(phydev, 0xe, 0x805d);
-	phy_write(phydev, 0xd, 0x4003);
-	val = phy_read(phydev, 0xe);
-	val &= ~(0x1 << 8);
-	phy_write(phydev, 0xe, val);
 
 	/* To enable AR8031 ouput a 125MHz clk from CLK_25M */
 	phy_write(phydev, 0xd, 0x7);
@@ -813,7 +795,7 @@ static struct i2c_board_info mxc_i2c0_board_info[] __initdata = {
 		I2C_BOARD_INFO("wm89**", 0x1a),
 	},
 	{
-		I2C_BOARD_INFO("ov564x", 0x3c),
+		I2C_BOARD_INFO("ov5642", 0x3c),
 		.platform_data = (void *)&camera_data,
 	},
 	{
@@ -865,7 +847,7 @@ static struct i2c_board_info mxc_i2c2_board_info[] __initdata = {
 	},
 	{
 		I2C_BOARD_INFO("mxc_ldb_i2c", 0x50),
-		.platform_data = (void *)1,	/* lvds port1 */
+		.platform_data = (void *)0,
 	},
 };
 
@@ -1119,14 +1101,6 @@ static void imx6q_sabresd_usbotg_vbus(bool on)
 		gpio_set_value(SABRESD_USB_OTG_PWR, 0);
 }
 
-static void imx6q_sabresd_host1_vbus(bool on)
-{
-	if (on)
-		gpio_set_value(SABRESD_USB_H1_PWR, 1);
-	else
-		gpio_set_value(SABRESD_USB_H1_PWR, 0);
-}
-
 static void __init imx6q_sabresd_init_usb(void)
 {
 	int ret = 0;
@@ -1149,15 +1123,13 @@ static void __init imx6q_sabresd_init_usb(void)
 			ret);
 		return;
 	}
-	gpio_direction_output(SABRESD_USB_H1_PWR, 0);
+	gpio_direction_output(SABRESD_USB_H1_PWR, 1);
 	if (board_is_mx6_reva())
 		mxc_iomux_set_gpr_register(1, 13, 1, 1);
 	else
 		mxc_iomux_set_gpr_register(1, 13, 1, 0);
 
 	mx6_set_otghost_vbus_func(imx6q_sabresd_usbotg_vbus);
-	mx6_set_host1_vbus_func(imx6q_sabresd_host1_vbus);
-
 }
 
 /* HW Initialization, if return 0, initialization is successful. */
@@ -1209,22 +1181,11 @@ static int mx6q_sabresd_sata_init(struct device *dev, void __iomem *addr)
 	tmpdata = clk_get_rate(clk) / 1000;
 	clk_put(clk);
 
-#ifdef CONFIG_SATA_AHCI_PLATFORM
 	ret = sata_init(addr, tmpdata);
 	if (ret == 0)
 		return ret;
-#else
-	usleep_range(1000, 2000);
-	/* AHCI PHY enter into PDDQ mode if the AHCI module is not enabled */
-	tmpdata = readl(addr + PORT_PHY_CTL);
-	writel(tmpdata | PORT_PHY_CTL_PDDQ_LOC, addr + PORT_PHY_CTL);
-	pr_info("No AHCI save PWR: PDDQ %s\n", ((readl(addr + PORT_PHY_CTL)
-					>> 20) & 1) ? "enabled" : "disabled");
-#endif
 
 release_sata_clk:
-	/* disable SATA_PHY PLL */
-	writel((readl(IOMUXC_GPR13) & ~0x2), IOMUXC_GPR13);
 	clk_disable(sata_clk);
 put_sata_clk:
 	clk_put(sata_clk);
@@ -1232,7 +1193,6 @@ put_sata_clk:
 	return ret;
 }
 
-#ifdef CONFIG_SATA_AHCI_PLATFORM
 static void mx6q_sabresd_sata_exit(struct device *dev)
 {
 	clk_disable(sata_clk);
@@ -1243,7 +1203,6 @@ static struct ahci_platform_data mx6q_sabresd_sata_data = {
 	.init = mx6q_sabresd_sata_init,
 	.exit = mx6q_sabresd_sata_exit,
 };
-#endif
 
 static void mx6q_sabresd_flexcan0_switch(int enable)
 {
@@ -1260,7 +1219,7 @@ static const struct flexcan_platform_data
 };
 
 static struct viv_gpu_platform_data imx6q_gpu_pdata __initdata = {
-	.reserved_mem_size = SZ_128M + SZ_64M - SZ_16M,
+	.reserved_mem_size = SZ_128M + SZ_64M,
 };
 
 static struct imx_asrc_platform_data imx_asrc_data = {
@@ -1295,7 +1254,7 @@ static struct ipuv3_fb_platform_data sabresd_fb_data[] = {
 	.disp_dev = "ldb",
 	.interface_pix_fmt = IPU_PIX_FMT_RGB666,
 	.mode_str = "LDB-XGA",
-	.default_bpp = 16,
+	.default_bpp = 32,
 	.int_clk = false,
 	.late_init = false,
 	}, {
@@ -1309,7 +1268,7 @@ static struct ipuv3_fb_platform_data sabresd_fb_data[] = {
 	.disp_dev = "ldb",
 	.interface_pix_fmt = IPU_PIX_FMT_RGB666,
 	.mode_str = "LDB-XGA",
-	.default_bpp = 16,
+	.default_bpp = 32,
 	.int_clk = false,
 	.late_init = false,
 	},
@@ -1368,10 +1327,12 @@ static struct fsl_mxc_hdmi_platform_data hdmi_data = {
 	.init = hdmi_init,
 	.enable_pins = hdmi_enable_ddc_pin,
 	.disable_pins = hdmi_disable_ddc_pin,
+	.phy_reg_vlev = 0x0294,
+	.phy_reg_cksymtx = 0x800d,
 };
 
 static struct fsl_mxc_hdmi_core_platform_data hdmi_core_data = {
-	.ipu_id = 1,
+	.ipu_id = 0,
 	.disp_id = 0,
 };
 
@@ -1382,11 +1343,11 @@ static struct fsl_mxc_lcd_platform_data lcdif_data = {
 };
 
 static struct fsl_mxc_ldb_platform_data ldb_data = {
-	.ipu_id = 0,
+	.ipu_id = 1,
 	.disp_id = 1,
 	.ext_ref = 1,
 	.mode = LDB_SEP1,
-	.sec_ipu_id = 0,
+	.sec_ipu_id = 1,
 	.sec_disp_id = 0,
 };
 
@@ -1427,8 +1388,7 @@ static struct ion_platform_data imx_ion_data = {
 		.id = 0,
 		.type = ION_HEAP_TYPE_CARVEOUT,
 		.name = "vpu_ion",
-		.size = SZ_16M,
-		.cacheable = 1,
+		.size = SZ_64M,
 		},
 	},
 };
@@ -1447,33 +1407,16 @@ static struct fsl_mxc_capture_platform_data capture_data[] = {
 	},
 };
 
-static void mx6q_sd_bt_reset(void)
-{
-	printk(KERN_INFO "mx6q_sd_bt_reset");
-	gpio_request(SABRESD_BT_RESET, "bt-reset");
-	gpio_direction_output(SABRESD_BT_RESET, 0);
-	/* pull down reset pin at least >5ms */
-	mdelay(6);
-	/* pull up after power supply BT */
-	gpio_direction_output(SABRESD_BT_RESET, 1);
-	gpio_free(SABRESD_BT_RESET);
-	msleep(100);
-}
 
-static int mx6q_sd_bt_power_change(int status)
-{
-	if (status)
-		mx6q_sd_bt_reset();
-	return 0;
-}
-
-static struct platform_device mxc_bt_rfkill = {
-	.name = "mxc_bt_rfkill",
+struct imx_vout_mem {
+	resource_size_t res_mbase;
+	resource_size_t res_msize;
 };
 
-static struct imx_bt_rfkill_platform_data mxc_bt_rfkill_data = {
-	.power_change = mx6q_sd_bt_power_change,
+static struct imx_vout_mem vout_mem __initdata = {
+	.res_msize = SZ_128M,
 };
+
 static void sabresd_suspend_enter(void)
 {
 	/* suspend preparation */
@@ -1539,6 +1482,31 @@ static int __init imx6q_init_audio(void)
 	return 0;
 }
 
+#ifndef CONFIG_IMX_PCIE
+static void pcie_3v3_power(void)
+{
+	/* disable PCIE_3V3 first */
+	gpio_request(SABRESD_PCIE_PWR_EN, "pcie_3v3_en");
+	gpio_direction_output(SABRESD_PCIE_PWR_EN, 0);
+	mdelay(10);
+	/* enable PCIE_3V3 again */
+	gpio_set_value(SABRESD_PCIE_PWR_EN, 1);
+	gpio_free(SABRESD_PCIE_PWR_EN);
+}
+
+static void pcie_3v3_reset(void)
+{
+	/* reset miniPCIe */
+	gpio_request(SABRESD_PCIE_RST_B_REVB, "pcie_reset_rebB");
+	gpio_direction_output(SABRESD_PCIE_RST_B_REVB, 0);
+	/* The PCI Express Mini CEM specification states that PREST# is
+	deasserted minimum 1ms after 3.3vVaux has been applied and stable*/
+	mdelay(1);
+	gpio_set_value(SABRESD_PCIE_RST_B_REVB, 1);
+	gpio_free(SABRESD_PCIE_RST_B_REVB);
+}
+#endif
+
 static void gps_power_on(bool on)
 {
 	/* Enable/disable aux_3v15 */
@@ -1595,13 +1563,9 @@ static struct platform_device imx6q_gpio_led_device = {
 	}
 };
 
-/* For BT_PWD_L is conflict with charger's LED trigger gpio on sabresd_revC.
- * add mutual exclusion here to be decided which one to be used by board config
- */
 static void __init imx6q_add_device_gpio_leds(void)
 {
-	if (!uart5_enabled)
-		platform_device_register(&imx6q_gpio_led_device);
+	platform_device_register(&imx6q_gpio_led_device);
 }
 #else
 static void __init imx6q_add_device_gpio_leds(void) {}
@@ -1619,65 +1583,28 @@ static void __init imx6q_add_device_gpio_leds(void) {}
 	.debounce_interval = debounce,				\
 }
 
-static struct gpio_keys_button sabresd_buttons[] = {
+static struct gpio_keys_button imx6q_buttons[] = {
 	GPIO_BUTTON(SABRESD_VOLUME_UP, KEY_VOLUMEUP, 1, "volume-up", 0, 1),
 	GPIO_BUTTON(SABRESD_VOLUME_DN, KEY_POWER, 1, "volume-down", 1, 1),
 };
 
-static struct gpio_keys_platform_data sabresd_button_data = {
-	.buttons	= sabresd_buttons,
-	.nbuttons	= ARRAY_SIZE(sabresd_buttons),
+static struct gpio_keys_platform_data imx6q_button_data = {
+	.buttons	= imx6q_buttons,
+	.nbuttons	= ARRAY_SIZE(imx6q_buttons),
 };
 
-static struct gpio_keys_button new_sabresd_buttons[] = {
-	GPIO_BUTTON(SABRESD_VOLUME_UP, KEY_VOLUMEUP, 1, "volume-up", 0, 1),
-	GPIO_BUTTON(SABRESD_VOLUME_DN, KEY_VOLUMEDOWN, 1, "volume-down", 0, 1),
-	GPIO_BUTTON(SABRESD_POWER_OFF, KEY_POWER, 1, "power-key", 1, 1),
-};
-
-static struct gpio_keys_platform_data new_sabresd_button_data = {
-	.buttons	= new_sabresd_buttons,
-	.nbuttons	= ARRAY_SIZE(new_sabresd_buttons),
-};
-
-static struct platform_device sabresd_button_device = {
+static struct platform_device imx6q_button_device = {
 	.name		= "gpio-keys",
 	.id		= -1,
 	.num_resources  = 0,
+	.dev		= {
+		.platform_data = &imx6q_button_data,
+	}
 };
 
 static void __init imx6q_add_device_buttons(void)
 {
-	/* fix me */
-	/* For new sabresd(RevB4 ane above) change the
-	 * ONOFF key(SW1) design, the SW1 now connect
-	 * to GPIO_3_29, it can be use as a general power
-	 * key that Android reuired. But those old sabresd
-	 * such as RevB or older could not support this
-	 * change, so it needs a way to distinguish different
-	 * boards. Before board id/rev are defined cleary,
-	 * there is a simple way to achive this, that is using
-	 * SOC revison to identify differnt board revison.
-	 *
-	 * With the new sabresd change and SW mapping the
-	 * SW1 as power key, below function related to power
-	 * key are OK on new sabresd board(B4 or above).
-	 * 	1 Act as power button to power on the device when device is power off
-	 * 	2 Act as power button to power on the device(need keep press SW1 >5s)
-	 *	3 Act as power key to let device suspend/resume
-	 *	4 Act screenshort(hold power key and volume down key for 2s)
-	 */
-	if (mx6q_revision() >= IMX_CHIP_REVISION_1_2 ||
-			mx6dl_revision() >= IMX_CHIP_REVISION_1_1)
-		platform_device_add_data(&sabresd_button_device,
-				&new_sabresd_button_data,
-				sizeof(new_sabresd_button_data));
-	else
-		platform_device_add_data(&sabresd_button_device,
-				&sabresd_button_data,
-				sizeof(sabresd_button_data));
-
-	platform_device_register(&sabresd_button_device);
+	platform_device_register(&imx6q_button_device);
 }
 #else
 static void __init imx6q_add_device_buttons(void) {}
@@ -1691,8 +1618,14 @@ static struct platform_pwm_backlight_data mx6_sabresd_pwm_backlight_data = {
 };
 
 static struct mxc_dvfs_platform_data sabresd_dvfscore_data = {
+#ifdef CONFIG_MX6_INTER_LDO_BYPASS
 	.reg_id = "VDDCORE",
 	.soc_id	= "VDDSOC",
+#else
+	.reg_id = "cpu_vddgp",
+	.soc_id = "cpu_vddsoc",
+	.pu_id = "cpu_vddvpu",
+#endif
 	.clk1_id = "cpu_clk",
 	.clk2_id = "gpc_dvfs_clk",
 	.gpc_cntr_offset = MXC_GPC_CNTR_OFFSET,
@@ -1735,28 +1668,6 @@ static void __init fixup_mxc_board(struct machine_desc *desc, struct tag *tags,
 					pdata_fb[i++].res_size[0] = memparse(str, &str);
 				}
 			}
-			/* ION reserved memory */
-			str = t->u.cmdline.cmdline;
-			str = strstr(str, "ionmem=");
-			if (str != NULL) {
-				str += 7;
-				imx_ion_data.heaps[0].size = memparse(str, &str);
-			}
-			/* Primary framebuffer base address */
-			str = t->u.cmdline.cmdline;
-			str = strstr(str, "fb0base=");
-			if (str != NULL) {
-				str += 8;
-				pdata_fb[0].res_base[0] =
-						simple_strtol(str, &str, 16);
-			}
-			/* GPU reserved memory */
-			str = t->u.cmdline.cmdline;
-			str = strstr(str, "gpumem=");
-			if (str != NULL) {
-				str += 7;
-				imx6q_gpu_pdata.reserved_mem_size = memparse(str, &str);
-			}
 			break;
 		}
 	}
@@ -1770,13 +1681,6 @@ static struct mipi_csi2_platform_data mipi_csi2_pdata = {
 	.dphy_clk = "mipi_pllref_clk",
 	.pixel_clk = "emi_clk",
 };
-
-static int __init caam_setup(char *__unused)
-{
-	caam_enabled = 1;
-	return 1;
-}
-early_param("caam", caam_setup);
 
 #define SNVS_LPCR 0x38
 static void mx6_snvs_poweroff(void)
@@ -1794,64 +1698,19 @@ static const struct imx_pcie_platform_data mx6_sabresd_pcie_data __initconst = {
 	.pcie_rst	= SABRESD_PCIE_RST_B_REVB,
 	.pcie_wake_up	= SABRESD_PCIE_WAKE_B,
 	.pcie_dis	= SABRESD_PCIE_DIS_B,
-	.pcie_power_always_on = 1,
-};
-
-#ifdef CONFIG_ANDROID_RAM_CONSOLE
-static struct resource ram_console_resource = {
-	.name = "android ram console",
-	.flags = IORESOURCE_MEM,
-};
-
-static struct platform_device android_ram_console = {
-	.name = "ram_console",
-	.num_resources = 1,
-	.resource = &ram_console_resource,
-};
-
-static int __init imx6x_add_ram_console(void)
-{
-	return platform_device_register(&android_ram_console);
-}
+#ifdef CONFIG_IMX_PCIE_EP_MODE_IN_EP_RC_SYS
+	.type_ep	= 1,
 #else
-#define imx6x_add_ram_console() do {} while (0)
+	.type_ep	= 0,
 #endif
-
-static iomux_v3_cfg_t mx6q_uart5_pads[] = {
-	MX6Q_PAD_KEY_ROW1__UART5_RXD,
-	MX6Q_PAD_KEY_COL1__UART5_TXD,
-	MX6Q_PAD_KEY_COL4__UART5_RTS,
-	MX6Q_PAD_KEY_ROW4__UART5_CTS,
-	/* gpio for reset */
-	MX6Q_PAD_GPIO_2__GPIO_1_2,
 };
 
-static iomux_v3_cfg_t mx6dl_uart5_pads[] = {
-	MX6DL_PAD_KEY_ROW1__UART5_RXD,
-	MX6DL_PAD_KEY_COL1__UART5_TXD,
-	MX6DL_PAD_KEY_COL4__UART5_RTS,
-	MX6DL_PAD_KEY_ROW4__UART5_CTS,
-	/* gpio for reset */
-	MX6DL_PAD_GPIO_2__GPIO_1_2,
-};
-static int __init uart5_setup(char * __unused)
+static int __init early_enable_lcd_ldb(char *p)
 {
-	uart5_enabled = 1;
-	return 1;
+	enable_lcd_ldb = 1;
+	return 0;
 }
-__setup("bluetooth", uart5_setup);
-
-static void __init uart5_init(void)
-{
-	printk(KERN_INFO "uart5 is added\n");
-	if (cpu_is_mx6q())
-		mxc_iomux_v3_setup_multiple_pads(mx6q_uart5_pads,
-				ARRAY_SIZE(mx6q_uart5_pads));
-	else if (cpu_is_mx6dl())
-		mxc_iomux_v3_setup_multiple_pads(mx6dl_uart5_pads,
-				ARRAY_SIZE(mx6dl_uart5_pads));
-	imx6q_add_imx_uart(4, &mx6q_sd_uart5_data);
-}
+early_param("enable_lcd_ldb", early_enable_lcd_ldb);
 
 /*!
  * Board specific initialization.
@@ -1863,6 +1722,7 @@ static void __init mx6_sabresd_board_init(void)
 	struct clk *clko, *clko2;
 	struct clk *new_parent;
 	int rate;
+	struct platform_device *voutdev;
 
 	if (cpu_is_mx6q())
 		mxc_iomux_v3_setup_multiple_pads(mx6q_sabresd_pads,
@@ -1883,14 +1743,9 @@ static void __init mx6_sabresd_board_init(void)
 
 	gp_reg_id = sabresd_dvfscore_data.reg_id;
 	soc_reg_id = sabresd_dvfscore_data.soc_id;
+	pu_reg_id = sabresd_dvfscore_data.pu_id;
 	mx6q_sabresd_init_uart();
-	imx6x_add_ram_console();
 
-	/*add bt support*/
-	if (uart5_enabled) {
-		uart5_init();
-		mxc_register_device(&mxc_bt_rfkill, &mxc_bt_rfkill_data);
-	}
 	/*
 	 * MX6DL/Solo only supports single IPU
 	 * The following codes are used to change ipu id
@@ -1901,11 +1756,9 @@ static void __init mx6_sabresd_board_init(void)
 	if (cpu_is_mx6dl()) {
 		ldb_data.ipu_id = 0;
 		ldb_data.disp_id = 1;
-		hdmi_core_data.ipu_id = 0;
 		hdmi_core_data.disp_id = 0;
 		mipi_dsi_pdata.ipu_id = 0;
 		mipi_dsi_pdata.disp_id = 1;
-		ldb_data.sec_ipu_id = 0;
 	}
 	imx6q_add_mxc_hdmi_core(&hdmi_core_data);
 
@@ -1922,14 +1775,22 @@ static void __init mx6_sabresd_board_init(void)
 	imx6q_add_mipi_dsi(&mipi_dsi_pdata);
 	imx6q_add_lcdif(&lcdif_data);
 	imx6q_add_ldb(&ldb_data);
-	imx6q_add_v4l2_output(0);
+	voutdev = imx6q_add_v4l2_output(0);
+	if (vout_mem.res_msize && voutdev) {
+		dma_declare_coherent_memory(&voutdev->dev,
+					    vout_mem.res_mbase,
+					    vout_mem.res_mbase,
+					    vout_mem.res_msize,
+					    (DMA_MEMORY_MAP |
+					     DMA_MEMORY_EXCLUSIVE));
+	}
+
 	imx6q_add_v4l2_capture(0, &capture_data[0]);
 	imx6q_add_v4l2_capture(1, &capture_data[1]);
 	imx6q_add_mipi_csi2(&mipi_csi2_pdata);
 	imx6q_add_imx_snvs_rtc();
 
-	if (1 == caam_enabled)
-		imx6q_add_imx_caam();
+	imx6q_add_imx_caam();
 
 	if (board_is_mx6_reva()) {
 		strcpy(mxc_i2c0_board_info[0].type, "wm8958");
@@ -1982,14 +1843,8 @@ static void __init mx6_sabresd_board_init(void)
 	imx_add_viv_gpu(&imx6_gpu_data, &imx6q_gpu_pdata);
 	imx6q_sabresd_init_usb();
 	/* SATA is not supported by MX6DL/Solo */
-	if (cpu_is_mx6q()) {
-#ifdef CONFIG_SATA_AHCI_PLATFORM
+	if (cpu_is_mx6q())
 		imx6q_add_ahci(0, &mx6q_sabresd_sata_data);
-#else
-		mx6q_sabresd_sata_init(NULL,
-			(void __iomem *)ioremap(MX6Q_SATA_BASE_ADDR, SZ_4K));
-#endif
-	}
 	imx6q_add_vpu();
 	imx6q_init_audio();
 	platform_device_register(&sabresd_vmmc_reg_devices);
@@ -2020,11 +1875,9 @@ static void __init mx6_sabresd_board_init(void)
 	imx6q_add_dma();
 
 	imx6q_add_dvfs_core(&sabresd_dvfscore_data);
-
-	if (imx_ion_data.heaps[0].size)
-		imx6q_add_ion(0, &imx_ion_data,
-			sizeof(imx_ion_data) + sizeof(struct ion_platform_heap));
-
+#ifndef CONFIG_MX6_INTER_LDO_BYPASS
+	mx6_cpu_regulator_init();
+#endif
 	imx6q_add_device_buttons();
 
 	/* enable sensor 3v3 and 1v8 */
@@ -2081,17 +1934,21 @@ static void __init mx6_sabresd_board_init(void)
 	gpio_direction_output(SABRESD_AUX_5V_EN, 1);
 	gpio_set_value(SABRESD_AUX_5V_EN, 1);
 
+#ifndef CONFIG_IMX_PCIE
+	/* enable pcie 3v3 power without pcie driver */
+	pcie_3v3_power();
+	mdelay(10);
+	pcie_3v3_reset();
+#endif
+
 	gps_power_on(true);
 	/* Register charger chips */
 	platform_device_register(&sabresd_max8903_charger_1);
 	pm_power_off = mx6_snvs_poweroff;
 	imx6q_add_busfreq();
 
-	/* Add PCIe RC interface support
-	 * uart5 has pin mux with pcie. or you will use uart5 or use pcie
-	 */
-	if (!uart5_enabled)
-		imx6q_add_pcie(&mx6_sabresd_pcie_data);
+	/* Add PCIe RC interface support */
+	imx6q_add_pcie(&mx6_sabresd_pcie_data);
 	if (cpu_is_mx6dl()) {
 		mxc_iomux_v3_setup_multiple_pads(mx6dl_arm2_elan_pads,
 						ARRAY_SIZE(mx6dl_arm2_elan_pads));
@@ -2139,39 +1996,7 @@ static struct sys_timer mx6_sabresd_timer = {
 static void __init mx6q_sabresd_reserve(void)
 {
 	phys_addr_t phys;
-	int i, fb0_reserved = 0, fb_array_size;
-
-	/*
-	 * Reserve primary framebuffer memory if its base address
-	 * is set by kernel command line.
-	 */
-	fb_array_size = ARRAY_SIZE(sabresd_fb_data);
-	if (fb_array_size > 0 && sabresd_fb_data[0].res_base[0] &&
-	    sabresd_fb_data[0].res_size[0]) {
-		memblock_reserve(sabresd_fb_data[0].res_base[0],
-				 sabresd_fb_data[0].res_size[0]);
-		memblock_remove(sabresd_fb_data[0].res_base[0],
-				sabresd_fb_data[0].res_size[0]);
-		sabresd_fb_data[0].late_init = true;
-		ipu_data[ldb_data.ipu_id].bypass_reset = true;
-		fb0_reserved = 1;
-	}
-	for (i = fb0_reserved; i < fb_array_size; i++)
-		if (sabresd_fb_data[i].res_size[0]) {
-			/* Reserve for other background buffer. */
-			phys = memblock_alloc(sabresd_fb_data[i].res_size[0],
-						SZ_4K);
-			memblock_remove(phys, sabresd_fb_data[i].res_size[0]);
-			sabresd_fb_data[i].res_base[0] = phys;
-		}
-
-#ifdef CONFIG_ANDROID_RAM_CONSOLE
-	phys = memblock_alloc_base(SZ_128K, SZ_4K, SZ_1G);
-	memblock_remove(phys, SZ_128K);
-	memblock_free(phys, SZ_128K);
-	ram_console_resource.start = phys;
-	ram_console_resource.end   = phys + SZ_128K - 1;
-#endif
+	int i;
 
 #if defined(CONFIG_MXC_GPU_VIV) || defined(CONFIG_MXC_GPU_VIV_MODULE)
 	if (imx6q_gpu_pdata.reserved_mem_size) {
@@ -2189,6 +2014,21 @@ static void __init mx6q_sabresd_reserve(void)
 		imx_ion_data.heaps[0].base = phys;
 	}
 #endif
+
+	for (i = 0; i < ARRAY_SIZE(sabresd_fb_data); i++)
+		if (sabresd_fb_data[i].res_size[0]) {
+			/* reserve for background buffer */
+			phys = memblock_alloc(sabresd_fb_data[i].res_size[0],
+						SZ_4K);
+			memblock_remove(phys, sabresd_fb_data[i].res_size[0]);
+			sabresd_fb_data[i].res_base[0] = phys;
+		}
+	if (vout_mem.res_msize) {
+		phys = memblock_alloc_base(vout_mem.res_msize,
+					   SZ_4K, SZ_1G);
+		memblock_remove(phys, vout_mem.res_msize);
+		vout_mem.res_mbase = phys;
+	}
 }
 
 /*

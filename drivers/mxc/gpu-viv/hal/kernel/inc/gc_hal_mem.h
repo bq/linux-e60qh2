@@ -1,6 +1,6 @@
 /****************************************************************************
 *
-*    Copyright (C) 2005 - 2013 by Vivante Corp.
+*    Copyright (C) 2005 - 2012 by Vivante Corp.
 *
 *    This program is free software; you can redistribute it and/or modify
 *    it under the terms of the GNU General Public License as published by
@@ -17,6 +17,8 @@
 *    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 *
 *****************************************************************************/
+
+
 
 
 /*
@@ -174,7 +176,7 @@ Prefix##_CAllocate##TypeName( \
 	gceSTATUS				status; \
     gcmHEADER_ARG("MemPool=0x%x Pointer=0x%x", MemPool, Pointer); \
 	gcmERR_RETURN(gcfMEM_FSMemPoolGetANode(MemPool, (gctPOINTER *) Pointer)); \
-	gcoOS_ZeroMemory(*(gctPOINTER *) Pointer, gcmSIZEOF(Type)); \
+	gcmVERIFY_OK(gcoOS_ZeroMemory(*(gctPOINTER *) Pointer, gcmSIZEOF(Type))); \
     gcmFOOTER(); \
 	return gcvSTATUS_OK; \
 } \
@@ -231,7 +233,7 @@ gceSTATUS \
 	gceSTATUS				status; \
     gcmHEADER_ARG("MemPool=0x%x Pointer=0x%x Size=%u", MemPool, Pointer, Size); \
 	gcmERR_RETURN(gcfMEM_VSMemPoolGetANode(MemPool, Size, (gctPOINTER *) Pointer)); \
-	gcoOS_ZeroMemory(*(gctPOINTER *) Pointer, size); \
+	gcmVERIFY_OK(gcoOS_ZeroMemory(*(gctPOINTER *) Pointer, size)); \
     gcmFOOTER(); \
 	return gcvSTATUS_OK; \
 } \
@@ -274,7 +276,7 @@ Prefix##_CAllocate##TypeName( \
 	gceSTATUS				status; \
     gcmHEADER_ARG("MemPool=0x%x Pointer=0x%x Count=%u", MemPool, Pointer, Count); \
 	gcmERR_RETURN(gcfMEM_AFSMemPoolGetANode(MemPool, Count, (gctPOINTER *) Pointer)); \
-	gcoOS_ZeroMemory(*(gctPOINTER *) Pointer, Count * gcmSIZEOF(Type)); \
+	gcmVERIFY_OK(gcoOS_ZeroMemory(*(gctPOINTER *) Pointer, Count * gcmSIZEOF(Type))); \
     gcmFOOTER(); \
 	return gcvSTATUS_OK; \
 } \
@@ -321,7 +323,7 @@ Prefix##_CAllocate##TypeName( \
 	gcmERR_RETURN(gcoOS_Allocate(MemPool, \
 							gcmSIZEOF(Type), \
 							(gctPOINTER *) Pointer)); \
-	gcoOS_ZeroMemory(*(gctPOINTER *) Pointer, gcmSIZEOF(Type)); \
+	gcmVERIFY_OK(gcoOS_ZeroMemory(*(gctPOINTER *) Pointer, gcmSIZEOF(Type))); \
     gcmFOOTER(); \
 	return gcvSTATUS_OK; \
 } \
@@ -368,7 +370,7 @@ Prefix##_CAllocate##TypeName( \
 	gcmERR_RETURN(gcoOS_Allocate(MemPool, \
 							Size, \
 							(gctPOINTER *) Pointer)); \
-	gcoOS_ZeroMemory(*(gctPOINTER *) Pointer, Size); \
+	gcmVERIFY_OK(gcoOS_ZeroMemory(*(gctPOINTER *) Pointer, Size)); \
     gcmFOOTER(); \
 	return gcvSTATUS_OK; \
 } \
@@ -415,7 +417,7 @@ Prefix##_CAllocate##TypeName( \
 	gcmERR_RETURN(gcoOS_Allocate(MemPool, \
 							Count * gcmSIZEOF(Type), \
 							(gctPOINTER *) Pointer)); \
-	gcoOS_ZeroMemory(*(gctPOINTER *) Pointer, Count * gcmSIZEOF(Type)); \
+	gcmVERIFY_OK(gcoOS_ZeroMemory(*(gctPOINTER *) Pointer, Count * gcmSIZEOF(Type))); \
     gcmFOOTER(); \
 	return gcvSTATUS_OK; \
 } \

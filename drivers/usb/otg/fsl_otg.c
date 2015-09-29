@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2005-2013 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright (C) 2005-2012 Freescale Semiconductor, Inc. All Rights Reserved.
  *
  * Author: Li Yang <LeoLi@freescale.com>
  *         Jerry Huang <Chang-Ming.Huang@freescale.com>
@@ -551,13 +551,9 @@ int fsl_otg_start_host(struct otg_fsm *fsm, int on)
 			goto end;
 		else {
 			VDBG("host off......\n");
-			if (host_pdrv->suspend) {
+			if (host_pdrv->suspend)
 				retval = host_pdrv->suspend(host_pdev,
 							otg_suspend_state);
-				if (fsm->id)
-					/* default-b */
-					fsl_otg_drv_vbus(dev->platform_data, 0);
-			}
 			otg_dev->host_working = 0;
 		}
 	}
@@ -670,8 +666,6 @@ static int fsl_otg_set_host(struct otg_transceiver *otg_p, struct usb_bus *host)
 
 	otg_dev->host_working = 0;
 
-	otg_statemachine(&otg_dev->fsm);
-
 	return 0;
 }
 
@@ -690,13 +684,19 @@ static int fsl_otg_set_peripheral(struct otg_transceiver *otg_p,
 		return -ENODEV;
 
 	if (!gadget) {
-		if (!otg_dev->otg.default_a)
+		/*
+		 * At i.mx platform, we still not implement fully
+		 * OTG.
+		 */
+		/*
+		if (!otg_dev->otg.default_a) {
 			otg_p->gadget->ops->vbus_draw(otg_p->gadget, 0);
-		usb_gadget_vbus_disconnect(otg_dev->otg.gadget);
+			usb_gadget_vbus_disconnect(otg_dev->otg.gadget);
+		}
+		*/
 		otg_dev->otg.gadget = 0;
 		otg_dev->fsm.b_bus_req = 0;
 		pdata->port_enables = 0;
-		otg_statemachine(&otg_dev->fsm);
 		return 0;
 	}
 	pdata->port_enables = 1;

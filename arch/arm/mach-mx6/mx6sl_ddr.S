@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright (C) 2012-2013 Freescale Semiconductor, Inc. All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,7 +18,9 @@
 
 #include <linux/linkage.h>
 #include <mach/hardware.h>
-
+.extern iram_tlb_phys_addr
+.extern mx6sl_ddr_freq_base
+.extern mx6sl_ddr_freq_phys_addr
 
 	 .macro    mx6sl_switch_to_24MHz
 
@@ -116,13 +118,6 @@ mmdc_podf0:
 
 	  .macro	ddr_switch_400MHz
 
-     /* Check if we are switching between
-       * 400Mhz <-> 50MHz. If so, we only need to
-       * update MMDC divider.
-       */
-      cmp    r1, #0
-      beq     change_divider_only
-
     /* Set MMDC divider first, in case PLL3 is at 480MHz. */
       ldr     r6, [r3, #0x10]
       and    r6, r6, #0x10000
@@ -141,6 +136,13 @@ mmdc_podf:
 
 pll3_in_bypass:
 
+     /* Check if we are switching between
+       * 400Mhz <-> 100MHz.If so, we should
+       * try to source MMDC from PLL2_200M.
+       */
+      cmp    r1, #0
+      beq     not_low_bus_freq
+
      /* Ensure that MMDC is sourced from PLL2 mux first. */
      ldr     r6, [r2, #0x14]
      bic     r6, r6, #0x4000000
@@ -151,6 +153,7 @@ periph2_clk_switch4:
      cmp     r6, #0
      bne     periph2_clk_switch4
 
+not_low_bus_freq:
      /* Now ensure periph2_clk2_sel mux is set to PLL3 */
      ldr     r6, [r2, #0x18]
      bic     r6, r6, #0x100000
@@ -165,6 +168,12 @@ periph2_clk_switch5:
      ldr     r6, [r2, #0x48]
      cmp     r6, #0
      bne     periph2_clk_switch5
+
+     /* Check if PLL2 is already unlocked.
+       * If so do nothing with PLL2.
+       */
+     cmp    r1, #0
+     beq	pll2_already_on
 
      /* Now power up PLL2 and unbypass it. */
      ldr    r6, [r3, #0x30]
@@ -192,27 +201,43 @@ wait_for_pll_lock:
      bic    r6, r6, #0x800000
      str     r6, [r3, #0x100]
 
+pll2_already_on:
     /* Now switch MMDC clk back to pll2_mux option. */
     /* Ensure pre_periph2_clk2 is set to pll2_pfd_400M */
+    /* If switching to audio DDR freq, set the
+     * pre_periph2_clk2 to PLL2_PFD_200M
+     */
+    ldr     r6, =400000000
+    cmp   r6, r0
+    bne    use_pll2_pfd_200M
+
      ldr     r6, [r2, #0x18]
      bic     r6, r6, #0x600000
      orr     r6, r6, #0x200000
      str     r6, [r2, #0x18]
+     ldr     r6, =400000000
+     b       cont2
 
-     ldr     r6, [r2, #0x14]
-     bic     r6, r6, #0x4000000
-     str     r6, [r2, #0x14]
+use_pll2_pfd_200M:
+     ldr     r6, [r2, #0x18]
+     orr     r6, r6, #0x600000
+     str     r6, [r2, #0x18]
+     ldr     r6, =200000000
+
+cont2:
+     ldr     r4, [r2, #0x14]
+     bic     r4, r4, #0x4000000
+     str     r4, [r2, #0x14]
 
 periph2_clk_switch6:
-     ldr     r6, [r2, #0x48]
-     cmp     r6, #0
+     ldr     r4, [r2, #0x48]
+     cmp     r4, #0
      bne     periph2_clk_switch6
 
 change_divider_only:
     /* Calculate the MMDC divider
      * based on the requested freq.
      */
-    ldr    r6, =400000000
     ldr    r4, =0
 Loop2:
     sub    r6, r6, r0
@@ -295,6 +320,7 @@ force_measure1:
       bne    force_measure1
       .endm
 
+    .align 3
 /*
  *  mx6sl_ddr_iram
  *
@@ -306,28 +332,78 @@ force_measure1:
  */
 ENTRY(mx6sl_ddr_iram)
 
-    push {r4, r5, r6, r7, r8, r9, r10 }
+    push {r4-r10}
+
+    /*
+     * To ensure no page table walks occur in DDR, we
+     * have a another page table stored in IRAM that only
+     * contains entries pointing to IRAM, AIPS1 and AIPS2.
+     * We need to set the TTBR1 to the new IRAM TLB.
+     * Do the following steps:
+     * 1. Flush the Branch Target Address Cache (BTAC)
+     * 2. Set TTBR1 to point to IRAM page table.
+     * 3. Disable page table walks in TTBR0 (PD0 = 1)
+     * 4. Set TTBR0.N=1, implying 0-2G is translated by TTBR0
+     *     and 2-4G is translated by TTBR1.
+     */
+
+    ldr    r6, =iram_tlb_phys_addr
+    ldr    r7, [r6]
+
+
+    /* Flush the Branch Target Address Cache (BTAC) */
+    ldr    r6, =0x0
+    mcr    p15, 0, r6, c7, c1, 6
+
+    /* Disable Branch Prediction, Z bit in SCTLR. */
+    mrc    p15, 0, r6, c1, c0, 0
+    bic    r6, r6, #0x800
+    mcr    p15, 0, r6, c1, c0, 0
+
+    dsb
+    isb
+    /* Store the IRAM table in TTBR1 */
+    mcr    p15, 0, r7, c2, c0, 1
+
+    /* Read TTBCR and set PD0=1, N = 1 */
+    mrc    p15, 0, r6, c2, c0, 2
+    orr    r6, r6, #0x11
+    mcr    p15, 0, r6, c2, c0, 2
+
+    dsb
+    isb
 
 mx6sl_ddr_freq_change:
+    /* flush the TLB */
+    ldr    r6, =0x0
+    mcr    p15, 0, r6, c8, c3, 0
+
+
+    /* Disable L1 data cache. */
+    mrc    p15, 0, r6, c1, c0, 0
+    bic    r6, r6, #0x4
+    mcr    p15, 0, r6, c1, c0, 0
+
+    /* 
+     * Sync L2 and then disable it.
+     */
+    dsb
+    ldr   r4, =L2_BASE_ADDR
+    add   r4, r4, #PERIPBASE_VIRT
+    ldr   r6, =0x0
+    str   r6, [r4, #0x730]
+    /* Disable L2. */
+    str   r6, [r4, #0x100]
+
+    dsb
+    isb
+
     ldr     r3, =ANATOP_BASE_ADDR
-    add   r3, r3, #PERIPBASE_VIRT
-
+    add     r3, r3, #PERIPBASE_VIRT
     ldr     r2, =CCM_BASE_ADDR
-    add   r2, r2, #PERIPBASE_VIRT
-
+    add     r2, r2, #PERIPBASE_VIRT
     ldr     r8, =MMDC_P0_BASE_ADDR
-    add   r8, r8, #PERIPBASE_VIRT
-
-    /* Prime all TLB entries. */
-    adr   r7, mx6sl_ddr_freq_change               @Address in this function.
-
-    ldr     r6, [r7]
-    ldr     r6, [r8]
-    ldr     r6, [r3]
-    ldr     r6, [r2]
-
-     dsb
-     isb
+    add     r8, r8, #PERIPBASE_VIRT
 
      /* Disable Automatic power savings. */
      ldr    r6, [r8, #0x404]
@@ -421,12 +497,74 @@ skip_power_down:
      bic     r6, r6, #0x100
      str     r6, [r8, #0x410]
 
-    pop {r4,r5, r6, r7, r8, r9, r10}
+    /* Enable L2. */
+    ldr   r1, =L2_BASE_ADDR
+    add   r1, r1, #PERIPBASE_VIRT
+    ldr   r6, =0x1
+    str   r6, [r1, #0x100]
+
+    /* Enable L1 data cache. */
+    mrc    p15, 0, r6, c1, c0, 0
+    orr    r6, r6, #0x4
+    mcr    p15, 0, r6, c1, c0, 0
+
+    /* Restore the TTBCR */
+    dsb
+    isb
+    /* Read TTBCR and set PD0=0, N = 0 */
+    mrc    p15, 0, r6, c2, c0, 2
+    bic    r6, r6, #0x11
+    mcr    p15, 0, r6, c2, c0, 2
+    dsb
+    isb
+
+    /* flush the TLB */
+    ldr    r6, =0x0
+    mcr    p15, 0, r6, c8, c3, 0
+
+    dsb
+    isb
+
+    /* Enable Branch Prediction, Z bit in SCTLR. */
+    mrc    p15, 0, r6, c1, c0, 0
+    orr    r6, r6, #0x800
+    mcr    p15, 0, r6, c1, c0, 0
+
+    /* Flush the Branch Target Address Cache (BTAC) */
+    ldr    r6, =0x0
+    mcr    p15, 0, r6, c7, c1, 6
+
+    nop
+    nop
+    nop
+    nop
+    nop
+
+    nop
+    nop
+    nop
+    nop
+    nop
+
+    nop
+    nop
+    nop
+    nop
+    nop
+
+    nop
+    nop
+    nop
+    nop
+    nop
+
+    nop
+    nop
+    nop
+    nop
+    nop
+
+    pop {r4-r10}
 
     /* Restore registers */
     mov     pc, lr
-
-    .type   mx6sl_ddr_do_iram, #object
-ENTRY(mx6sl_ddr_do_iram)
-    .word   mx6sl_ddr_iram
-    .size    mx6sl_ddr_iram, . - mx6sl_ddr_iram

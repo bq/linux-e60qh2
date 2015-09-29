@@ -4,6 +4,8 @@
  * Copyright (C) 2008 Google, Inc.
  * Author: Mike Lockwood <lockwood@android.com>
  *
+ * Copyright (C) 2015 Freescale Semiconductor, Inc.
+ *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
  * may be copied, distributed, and modified under those terms.
@@ -55,6 +57,8 @@ struct adb_dev {
 	wait_queue_head_t write_wq;
 	struct usb_request *rx_req;
 	int rx_done;
+	bool notify_close;
+	bool close_notified;
 };
 
 static struct usb_interface_descriptor adb_interface_desc = {
@@ -111,6 +115,8 @@ static struct usb_descriptor_header *hs_adb_descs[] = {
 	NULL,
 };
 
+static void adb_ready_callback(void);
+static void adb_closed_callback(void);
 
 /* temporary variable used between adb_open() and adb_gadget_bind() */
 static struct adb_dev *_adb_dev;
@@ -406,7 +412,7 @@ static ssize_t adb_write(struct file *fp, const char __user *buf,
 
 static int adb_open(struct inode *ip, struct file *fp)
 {
-	printk(KERN_INFO "adb_open\n");
+	pr_info("adb_open\n");
 	if (!_adb_dev)
 		return -ENODEV;
 
@@ -418,12 +424,33 @@ static int adb_open(struct inode *ip, struct file *fp)
 	/* clear the error latch */
 	_adb_dev->error = 0;
 
+	/*
+	 * If close_notified is true, it stated that it is "adb usb" case. So,
+	 * enable usb configuration again and enable D+ pull-up resistance.
+	 */
+	if (_adb_dev->close_notified) {
+		_adb_dev->close_notified = false;
+		adb_ready_callback();
+	}
+
+	_adb_dev->notify_close = true;
+
 	return 0;
 }
 
 static int adb_release(struct inode *ip, struct file *fp)
 {
-	printk(KERN_INFO "adb_release\n");
+	pr_info("adb_release\n");
+
+	/*
+	 * If notify_close is ture, it stated that "adb usb" has been issued. So,
+	 * try to disable usb configuration and reset usb bus.
+	 */
+	if (_adb_dev->notify_close) {
+		adb_closed_callback();
+		_adb_dev->close_notified = true;
+	}
+
 	adb_unlock(&_adb_dev->open_excl);
 	return 0;
 }
@@ -534,7 +561,16 @@ static void adb_function_disable(struct usb_function *f)
 	struct adb_dev	*dev = func_to_adb(f);
 	struct usb_composite_dev	*cdev = dev->cdev;
 
-	DBG(cdev, "adb_function_disable cdev %p\n", cdev);
+	pr_info("adb_function_disable\n");
+
+	/*
+	 * The possible case is: usb cable is disconnected or "adb usb" is
+	 * issued. If it is the former, adb_release will be called. If it is the
+	 * later, adb_release has been called. No matter which one, we set
+	 * notify_close to false at here.
+	 */
+	dev->notify_close = false;
+
 	dev->online = 0;
 	dev->error = 1;
 	usb_ep_disable(dev->ep_in);
@@ -569,6 +605,8 @@ static int adb_setup(void)
 	struct adb_dev *dev;
 	int ret;
 
+	pr_info("adb_setup\n");
+
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
@@ -581,6 +619,8 @@ static int adb_setup(void)
 	atomic_set(&dev->open_excl, 0);
 	atomic_set(&dev->read_excl, 0);
 	atomic_set(&dev->write_excl, 0);
+
+	dev->close_notified = true;
 
 	INIT_LIST_HEAD(&dev->tx_idle);
 

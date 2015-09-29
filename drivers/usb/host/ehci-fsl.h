@@ -1,4 +1,4 @@
-/* Copyright (C) 2005-2013 Freescale Semiconductor, Inc.
+/* Copyright (C) 2005-2011 Freescale Semiconductor, Inc.
  * Copyright (c) 2005 MontaVista Software
  *
  * This program is free software; you can redistribute  it and/or modify it

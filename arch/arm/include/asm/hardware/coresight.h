@@ -144,8 +144,6 @@
 
 #define ETMR_TRACEIDR		0x200
 
-#define ETMR_TRACEIDR		0x200
-
 /* ETM management registers, "ETM Architecture", 3.5.24 */
 #define ETMMR_OSLAR	0x300
 #define ETMMR_OSLSR	0x304

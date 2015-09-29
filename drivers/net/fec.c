@@ -60,7 +60,6 @@
 
 #if defined(CONFIG_ARCH_MXC) || defined(CONFIG_SOC_IMX28)
 #define FEC_ALIGNMENT	0xf
-#define FEC_RX_FIFO_BR  0x480
 #else
 #define FEC_ALIGNMENT	0x3
 #endif
@@ -197,6 +196,7 @@ struct fec_enet_private {
 	struct net_device *netdev;
 
 	struct clk *clk;
+	struct clk *mdc_clk;
 
 	/* The saved address of a sent-in-place packet/buffer, for skfree(). */
 	unsigned char *tx_bounce[TX_RING_SIZE];
@@ -636,7 +636,7 @@ static int fec_rx_poll(struct napi_struct *napi, int budget)
 		data = (__u8 *)__va(bdp->cbd_bufaddr);
 
 		if (bdp->cbd_bufaddr)
-			dma_unmap_single(&ndev->dev, bdp->cbd_bufaddr,
+			dma_unmap_single(&fep->pdev->dev, bdp->cbd_bufaddr,
 				FEC_ENET_RX_FRSIZE, DMA_FROM_DEVICE);
 
 		if (id_entry->driver_data & FEC_QUIRK_SWAP_FRAME)
@@ -664,7 +664,7 @@ static int fec_rx_poll(struct napi_struct *napi, int budget)
 			netif_receive_skb(skb);
 		}
 
-		bdp->cbd_bufaddr = dma_map_single(&ndev->dev, data,
+		bdp->cbd_bufaddr = dma_map_single(&fep->pdev->dev, data,
 				FEC_ENET_RX_FRSIZE, DMA_FROM_DEVICE);
 rx_processing_done:
 		/* Clear the status flags for this buffer */
@@ -1140,9 +1140,8 @@ static int fec_enet_mii_init(struct platform_device *pdev)
 	/*
 	 * Set MII speed to 2.5 MHz (= clk_get_rate() / 2 * phy_speed)
 	 */
-	fep->phy_speed = DIV_ROUND_UP(clk_get_rate(fep->clk),
+	fep->phy_speed = DIV_ROUND_UP(clk_get_rate(fep->mdc_clk),
 					(FEC_ENET_MII_CLK << 2)) << 1;
-
 	/* set hold time to 2 internal clock cycle */
 	if (cpu_is_mx6q() || cpu_is_mx6dl())
 		fep->phy_speed |= FEC_ENET_HOLD_TIME;
@@ -1637,11 +1636,6 @@ fec_restart(struct net_device *dev, int duplex)
 	writel(0, fep->hwp + FEC_HASH_TABLE_LOW);
 #endif
 
-    /* FIXME: adjust RX FIFO size for performance*/
-#ifdef CONFIG_ARCH_MX53
-       writel(FEC_RX_FIFO_BR, fep->hwp + FEC_R_FSTART);
-#endif
-
 	/* Set maximum receive buffer size. */
 	writel(PKT_MAXBLR_SIZE, fep->hwp + FEC_R_BUFF_SIZE);
 
@@ -1873,36 +1867,42 @@ fec_probe(struct platform_device *pdev)
 	if (pdata)
 		fep->phy_interface = pdata->phy;
 
-#ifdef CONFIG_MX6_ENET_IRQ_TO_GPIO
-	gpio_request(pdata->gpio_irq, "gpio_enet_irq");
-	gpio_direction_input(pdata->gpio_irq);
+	if (pdata->gpio_irq > 0) {
+		gpio_request(pdata->gpio_irq, "gpio_enet_irq");
+		gpio_direction_input(pdata->gpio_irq);
 
-	irq = gpio_to_irq(pdata->gpio_irq);
-	ret = request_irq(irq, fec_enet_interrupt,
-			IRQF_TRIGGER_RISING,
-			 pdev->name, ndev);
-	if (ret)
-		goto failed_irq;
-#else
-	/* This device has up to three irqs on some platforms */
-	for (i = 0; i < 3; i++) {
-		irq = platform_get_irq(pdev, i);
-		if (i && irq < 0)
-			break;
-		ret = request_irq(irq, fec_enet_interrupt, IRQF_DISABLED, pdev->name, ndev);
-		if (ret) {
-			while (--i >= 0) {
-				irq = platform_get_irq(pdev, i);
-				free_irq(irq, ndev);
-			}
+		irq = gpio_to_irq(pdata->gpio_irq);
+		ret = request_irq(irq, fec_enet_interrupt,
+				IRQF_TRIGGER_RISING,
+				 pdev->name, ndev);
+		if (ret)
 			goto failed_irq;
+	} else {
+		/* This device has up to three irqs on some platforms */
+		for (i = 0; i < 3; i++) {
+			irq = platform_get_irq(pdev, i);
+			if (i && irq < 0)
+				break;
+			ret = request_irq(irq, fec_enet_interrupt,
+					IRQF_DISABLED, pdev->name, ndev);
+			if (ret) {
+				while (--i >= 0) {
+					irq = platform_get_irq(pdev, i);
+					free_irq(irq, ndev);
+				}
+				goto failed_irq;
+			}
 		}
 	}
-#endif
 
 	fep->clk = clk_get(&pdev->dev, "fec_clk");
 	if (IS_ERR(fep->clk)) {
 		ret = PTR_ERR(fep->clk);
+		goto failed_clk;
+	}
+	fep->mdc_clk = clk_get(&pdev->dev, "fec_mdc_clk");
+	if (IS_ERR(fep->mdc_clk)) {
+		ret = PTR_ERR(fep->mdc_clk);
 		goto failed_clk;
 	}
 	clk_enable(fep->clk);
@@ -1948,16 +1948,17 @@ failed_mii_init:
 failed_init:
 	clk_disable(fep->clk);
 	clk_put(fep->clk);
+	clk_put(fep->mdc_clk);
 failed_clk:
-#ifdef CONFIG_MX6_ENET_IRQ_TO_GPIO
-	free_irq(irq, ndev);
-#else
-	for (i = 0; i < 3; i++) {
-		irq = platform_get_irq(pdev, i);
-		if (irq > 0)
-			free_irq(irq, ndev);
+	if (pdata->gpio_irq < 0)
+		free_irq(irq, ndev);
+	else {
+		for (i = 0; i < 3; i++) {
+			irq = platform_get_irq(pdev, i);
+			if (irq > 0)
+				free_irq(irq, ndev);
+		}
 	}
-#endif
 failed_irq:
 	iounmap(fep->hwp);
 failed_ioremap:
@@ -1980,6 +1981,7 @@ fec_drv_remove(struct platform_device *pdev)
 	fec_enet_mii_remove(fep);
 	clk_disable(fep->clk);
 	clk_put(fep->clk);
+	clk_put(fep->mdc_clk);
 	iounmap((void __iomem *)ndev->base_addr);
 	if (fep->ptimer_present)
 		fec_ptp_cleanup(fep->ptp_priv);

@@ -41,6 +41,7 @@
 #include <linux/mfd/mxc-hdmi-core.h>
 #include <linux/fsl_devices.h>
 #include <mach/hardware.h>
+#include <linux/mfd/mxc-hdmi-core.h>
 
 struct mxc_hdmi_data {
 	struct platform_device *pdev;
@@ -72,26 +73,31 @@ static spinlock_t hdmi_audio_lock, hdmi_blank_state_lock, hdmi_cable_state_lock;
 unsigned int hdmi_set_cable_state(unsigned int state)
 {
 	unsigned long flags;
+	struct snd_pcm_substream *substream = hdmi_audio_stream_playback;
 
 	spin_lock_irqsave(&hdmi_cable_state_lock, flags);
 	hdmi_cable_state = state;
 	spin_unlock_irqrestore(&hdmi_cable_state_lock, flags);
 
+	if (check_hdmi_state() && substream)
+		substream->ops->trigger(substream, SNDRV_PCM_TRIGGER_START);
 	return 0;
 }
-EXPORT_SYMBOL(hdmi_set_cable_state);
 
 unsigned int hdmi_set_blank_state(unsigned int state)
 {
 	unsigned long flags;
+	struct snd_pcm_substream *substream = hdmi_audio_stream_playback;
 
 	spin_lock_irqsave(&hdmi_blank_state_lock, flags);
 	hdmi_blank_state = state;
 	spin_unlock_irqrestore(&hdmi_blank_state_lock, flags);
 
+	if (check_hdmi_state() && substream)
+		substream->ops->trigger(substream, SNDRV_PCM_TRIGGER_START);
+
 	return 0;
 }
-EXPORT_SYMBOL(hdmi_set_blank_state);
 
 static void hdmi_audio_abort_stream(struct snd_pcm_substream *substream)
 {
@@ -100,7 +106,7 @@ static void hdmi_audio_abort_stream(struct snd_pcm_substream *substream)
 	snd_pcm_stream_lock_irqsave(substream, flags);
 
 	if (snd_pcm_running(substream))
-		snd_pcm_stop(substream, SNDRV_PCM_STATE_DISCONNECTED);
+		substream->ops->trigger(substream, SNDRV_PCM_TRIGGER_STOP);
 
 	snd_pcm_stream_unlock_irqrestore(substream, flags);
 }
@@ -115,9 +121,8 @@ int mxc_hdmi_abort_stream(void)
 
 	return 0;
 }
-EXPORT_SYMBOL(mxc_hdmi_abort_stream);
 
-static int check_hdmi_state(void)
+int check_hdmi_state(void)
 {
 	unsigned long flags1, flags2;
 	unsigned int ret;
@@ -132,7 +137,6 @@ static int check_hdmi_state(void)
 
 	return ret;
 }
-EXPORT_SYMBOL(check_hdmi_state);
 
 int mxc_hdmi_register_audio(struct snd_pcm_substream *substream)
 {
@@ -156,7 +160,6 @@ int mxc_hdmi_register_audio(struct snd_pcm_substream *substream)
 
 	return ret;
 }
-EXPORT_SYMBOL(mxc_hdmi_register_audio);
 
 void mxc_hdmi_unregister_audio(struct snd_pcm_substream *substream)
 {
@@ -166,7 +169,6 @@ void mxc_hdmi_unregister_audio(struct snd_pcm_substream *substream)
 	hdmi_audio_stream_playback = NULL;
 	spin_unlock_irqrestore(&hdmi_audio_lock, flags);
 }
-EXPORT_SYMBOL(mxc_hdmi_unregister_audio);
 
 u8 hdmi_readb(unsigned int reg)
 {
@@ -178,7 +180,6 @@ u8 hdmi_readb(unsigned int reg)
 
 	return value;
 }
-EXPORT_SYMBOL(hdmi_readb);
 
 #ifdef DEBUG
 static bool overflow_lo;
@@ -207,7 +208,6 @@ bool hdmi_check_overflow(void)
 	return false;
 }
 #endif
-EXPORT_SYMBOL(hdmi_check_overflow);
 
 void hdmi_writeb(u8 value, unsigned int reg)
 {
@@ -216,7 +216,6 @@ void hdmi_writeb(u8 value, unsigned int reg)
 	__raw_writeb(value, hdmi_base + reg);
 	hdmi_check_overflow();
 }
-EXPORT_SYMBOL(hdmi_writeb);
 
 void hdmi_mask_writeb(u8 data, unsigned int reg, u8 shift, u8 mask)
 {
@@ -224,7 +223,6 @@ void hdmi_mask_writeb(u8 data, unsigned int reg, u8 shift, u8 mask)
 	value |= (data << shift) & mask;
 	hdmi_writeb(value, reg);
 }
-EXPORT_SYMBOL(hdmi_mask_writeb);
 
 unsigned int hdmi_read4(unsigned int reg)
 {
@@ -234,7 +232,6 @@ unsigned int hdmi_read4(unsigned int reg)
 		(hdmi_readb(reg + 1) << 8) |
 		hdmi_readb(reg);
 }
-EXPORT_SYMBOL(hdmi_read4);
 
 void hdmi_write4(unsigned int value, unsigned int reg)
 {
@@ -244,7 +241,6 @@ void hdmi_write4(unsigned int value, unsigned int reg)
 	hdmi_writeb((value >> 16) & 0xff, reg + 2);
 	hdmi_writeb((value >> 24) & 0xff, reg + 3);
 }
-EXPORT_SYMBOL(hdmi_write4);
 
 static void initialize_hdmi_ih_mutes(void)
 {
@@ -513,7 +509,6 @@ unsigned int hdmi_SDMA_check(void)
 	return (mx6q_revision() > IMX_CHIP_REVISION_1_1) ||
 			(mx6dl_revision() > IMX_CHIP_REVISION_1_0);
 }
-EXPORT_SYMBOL(hdmi_SDMA_check);
 
 /* Need to run this before phy is enabled the first time to prevent
  * overflow condition in HDMI_IH_FC_STAT2 */
@@ -524,7 +519,6 @@ void hdmi_init_clk_regenerator(void)
 		hdmi_set_clk_regenerator();
 	}
 }
-EXPORT_SYMBOL(hdmi_init_clk_regenerator);
 
 void hdmi_clk_regenerator_update_pixel_clock(u32 pixclock)
 {
@@ -533,20 +527,17 @@ void hdmi_clk_regenerator_update_pixel_clock(u32 pixclock)
 	pixel_clk_rate = PICOS2KHZ(pixclock) * 1000UL;
 	hdmi_set_clk_regenerator();
 }
-EXPORT_SYMBOL(hdmi_clk_regenerator_update_pixel_clock);
 
 void hdmi_set_dma_mode(unsigned int dma_running)
 {
 	hdmi_dma_running = dma_running;
 	hdmi_set_clk_regenerator();
 }
-EXPORT_SYMBOL(hdmi_set_dma_mode);
 
 void hdmi_set_sample_rate(unsigned int rate)
 {
 	sample_rate = rate;
 }
-EXPORT_SYMBOL(hdmi_set_sample_rate);
 
 void hdmi_set_edid_cfg(struct mxc_edid_cfg *cfg)
 {
@@ -556,7 +547,6 @@ void hdmi_set_edid_cfg(struct mxc_edid_cfg *cfg)
 	memcpy(&hdmi_core_edid_cfg, cfg, sizeof(struct mxc_edid_cfg));
 	spin_unlock_irqrestore(&edid_spinlock, flags);
 }
-EXPORT_SYMBOL(hdmi_set_edid_cfg);
 
 void hdmi_get_edid_cfg(struct mxc_edid_cfg *cfg)
 {
@@ -566,19 +556,16 @@ void hdmi_get_edid_cfg(struct mxc_edid_cfg *cfg)
 	memcpy(cfg, &hdmi_core_edid_cfg, sizeof(struct mxc_edid_cfg));
 	spin_unlock_irqrestore(&edid_spinlock, flags);
 }
-EXPORT_SYMBOL(hdmi_get_edid_cfg);
 
 void hdmi_set_registered(int registered)
 {
 	hdmi_core_init = registered;
 }
-EXPORT_SYMBOL(hdmi_set_registered);
 
 int hdmi_get_registered(void)
 {
 	return hdmi_core_init;
 }
-EXPORT_SYMBOL(hdmi_get_registered);
 
 static int mxc_hdmi_core_probe(struct platform_device *pdev)
 {

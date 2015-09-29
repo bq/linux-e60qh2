@@ -667,6 +667,14 @@ config RTC_DRV_SNVS
 	   If you say yes here you get support for the Freescale SNVS
 	   Low Power (LP) RTC module.
 
+config RTC_DRV_NTX_MISC
+	tristate "Netronix misc Real Time Clock"
+	depends on ARCH_MXC
+	depends on RTC_CLASS
+	help
+	   If you say yes here you get support for the Netronix MISC
+	   micro P RTC module.
+
 config RTC_DRV_BQ4802
 	tristate "TI BQ4802"
 	help
@@ -1106,5 +1114,15 @@ config RTC_DRV_PUV3
 
 	  This drive can also be built as a module. If so, the module
 	  will be called rtc-puv3.
+
+config RTC_DRV_R5T619
+	tristate "Ricoh R5T619 PMIC RTC driver"
+	depends on MFD_RICOH619
+	default n
+	help
+	  If you say yes here you get support for the Ricoh R5T619 RTC module.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called rtc-r5t619.
 
 endif # RTC_CLASS

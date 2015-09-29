@@ -149,13 +149,6 @@ config BATTERY_DA9030
 	  Say Y here to enable support for batteries charger integrated into
 	  DA9030 PMIC.
 
-config BATTERY_MAX17085
-	tristate "Maxim MAX17085 charger"
-	depends on PMIC_DA9052 && SENSORS_DA9052
-	help
-	  Say Y to include support for the battery on the MAX17085. This
-	  is dependent on DA9052 sensor.
-
 config BATTERY_MAX17040
 	tristate "Maxim MAX17040 Fuel Gauge"
 	depends on I2C
@@ -256,5 +249,12 @@ config BATTERY_DA9052
 	help
 	  Say Y here to enable support for batteries charger integrated into
 	  DA9052 PMIC.
+
+config BATTERY_RICOH619
+	tristate "Ricoh R5T619 PMIC battery driver"
+	depends on MFD_RICOH619 && I2C && GENERIC_HARDIRQS
+	help
+	  Say Y to enable support for the battery control of the Ricoh R5T619
+	  Power Management device.
 
 endif # POWER_SUPPLY

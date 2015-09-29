@@ -38,6 +38,8 @@ u32 enable_ldo_mode = LDO_MODE_DEFAULT;
 u32 arm_max_freq = CPU_AT_1_2GHz;
 bool mem_clk_on_in_wait;
 int chip_rev;
+unsigned long iram_tlb_base_addr;
+unsigned long iram_tlb_phys_addr;
 
 void __iomem *gpc_base;
 void __iomem *ccm_base;
@@ -47,6 +49,26 @@ extern unsigned int num_cpu_idle_lock;
 static int cpu_silicon_rev = -1;
 #define MX6_USB_ANALOG_DIGPROG  0x260
 #define MX6SL_USB_ANALOG_DIGPROG  0x280
+
+unsigned long save_ttbr1(void)
+{
+	unsigned long lttbr1;
+	asm volatile(
+		".align 4\n"
+		"mrc p15, 0, %0, c2, c0, 1\n"
+	: "=r" (lttbr1)
+	);
+	return lttbr1;
+}
+
+void restore_ttbr1(u32 ttbr1)
+{
+	asm volatile(
+		".align 4\n"
+		"mcr p15, 0, %0, c2, c0, 1\n"
+	: : "r" (ttbr1)
+	);
+}
 
 static int mx6_get_srev(void)
 {
@@ -148,6 +170,12 @@ static int __init post_cpu_init(void)
 	__raw_writel(reg, base + 0x50);
 	iounmap(base);
 
+	/* Force IOMUXC irq to be pending for CCM LPM */
+	base = IO_ADDRESS(MX6Q_IOMUXC_BASE_ADDR);
+	reg = __raw_readl(base + 0x4);
+	reg |= 0x1000;
+	__raw_writel(reg, base + 0x4);
+
 	/* Allow SCU_CLK to be disabled when all cores are in WFI*/
 	base = IO_ADDRESS(SCU_BASE_ADDR);
 	reg = __raw_readl(base);
@@ -219,6 +247,37 @@ static int __init post_cpu_init(void)
 		reg = reg & (~IOMUXC_GPR1_PCIE_REF_CLK_EN);
 		reg |= IOMUXC_GPR1_TEST_POWERDOWN;
 		__raw_writel(reg, IOMUXC_GPR1);
+	}
+	if (cpu_is_mx6sl()) {
+		int i;
+		/*
+		 * Allocate the bottom 16K of IRAM page tables that
+		 * will be used when DDR is in self-refresh.
+		 */
+		iram_tlb_phys_addr = MX6_IRAM_TLB_BASE_ADDR;
+		iram_tlb_base_addr = (unsigned long)__arm_ioremap(iram_tlb_phys_addr,
+						MX6_IRAM_TLB_SIZE, MT_MEMORY_NONCACHED);
+
+		/* Set all entries to 0. */
+		memset((void *)iram_tlb_base_addr, 0, MX6_IRAM_TLB_SIZE);
+
+		/* Make sure the IRAM virtual address has a mapping in the IRAM page table. */
+		i = ((IRAM_BASE_ADDR_VIRT >> 20) << 2 ) / 4;
+		*((unsigned long *)iram_tlb_base_addr + i) =
+			(IRAM_BASE_ADDR & 0xFFF0000) | TT_ATTRIB_NON_CACHEABLE_1M;
+		/* Make sure the AIPS1 virtual address has a mapping in the IRAM page table. */
+		i = ((AIPS1_BASE_ADDR_VIRT >> 20) << 2) / 4;
+		*((unsigned long *)iram_tlb_base_addr + i) =
+			(AIPS1_ARB_BASE_ADDR & 0xFFF00000) | TT_ATTRIB_NON_CACHEABLE_1M;
+		/* Make sure the AIPS2 virtual address has a mapping in the IRAM page table. */
+		i = ((AIPS2_BASE_ADDR_VIRT >> 20) << 2) / 4;
+		*((unsigned long *)iram_tlb_base_addr + i) =
+			(AIPS2_ARB_BASE_ADDR & 0xFFF00000) | TT_ATTRIB_NON_CACHEABLE_1M;
+		/* Make sure the AIPS2 virtual address has a mapping in the IRAM page table. */
+		i = ((L2_BASE_ADDR_VIRT >> 20) << 2) / 4;
+		*((unsigned long *)iram_tlb_base_addr + i) =
+			(L2_BASE_ADDR & 0xFFF0000) | TT_ATTRIB_NON_CACHEABLE_1M;
+
 	}
 	return 0;
 }

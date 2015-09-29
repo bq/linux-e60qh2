@@ -2366,12 +2366,14 @@ out:
 
 #ifdef CONFIG_PM
 
+extern void eschc_cd_enable (struct sdhci_host *host, bool enable);
 int sdhci_suspend_host(struct sdhci_host *host, pm_message_t state)
 {
 	int ret;
 
 	sdhci_enable_clk(host);
 	sdhci_disable_card_detection(host);
+
 
 	/* Disable tuning since we are suspending */
 	if (host->version >= SDHCI_SPEC_300 && host->tuning_count &&
@@ -2395,6 +2397,7 @@ out:
 	 */
 	sdhci_enable_clk(host);
 	sdhci_disable_clk(host, 0);
+	eschc_cd_enable (host, 0);
 	return ret;
 }
 
@@ -2410,19 +2413,19 @@ int sdhci_resume_host(struct sdhci_host *host)
 			return ret;
 	}
 
+	eschc_cd_enable (host, 1);
 	sdhci_enable_clk(host);
 	if (host->flags & (SDHCI_USE_SDMA | SDHCI_USE_ADMA)) {
 		if (host->ops->enable_dma)
 			host->ops->enable_dma(host);
 	}
 
-	sdhci_init(host, (host->mmc->pm_flags & MMC_PM_KEEP_POWER));
-
 	ret = request_irq(host->irq, sdhci_irq, IRQF_SHARED,
 			  mmc_hostname(host->mmc), host);
 	if (ret)
 		goto out;
 
+	sdhci_init(host, (host->mmc->pm_flags & MMC_PM_KEEP_POWER));
 	mmiowb();
 
 	ret = mmc_resume_host(host->mmc);
@@ -2657,7 +2660,7 @@ int sdhci_add_host(struct sdhci_host *host)
 	} else
 		mmc->f_min = host->max_clk / SDHCI_MAX_DIV_SPEC_200;
 
-	mmc->caps |= MMC_CAP_SDIO_IRQ | MMC_CAP_ERASE;
+	mmc->caps |= MMC_CAP_SDIO_IRQ | MMC_CAP_ERASE | MMC_CAP_CMD23;
 
 	if (host->quirks & SDHCI_QUIRK_MULTIBLOCK_READ_ACMD12)
 		host->flags |= SDHCI_AUTO_CMD12;
@@ -2668,7 +2671,6 @@ int sdhci_add_host(struct sdhci_host *host)
 	    ((host->flags & SDHCI_USE_ADMA) ||
 	     !(host->flags & SDHCI_USE_SDMA))) {
 		host->flags |= SDHCI_AUTO_CMD23;
-		mmc->caps |= MMC_CAP_CMD23;
 		DBG("%s: Auto-CMD23 available\n", mmc_hostname(mmc));
 	} else {
 		DBG("%s: Auto-CMD23 unavailable\n", mmc_hostname(mmc));

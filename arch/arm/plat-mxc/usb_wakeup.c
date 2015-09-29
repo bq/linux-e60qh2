@@ -147,8 +147,19 @@ static void wakeup_event_handler(struct wakeup_ctrl *ctrl)
 	}
 
 	/* If nothing to wakeup, clear wakeup event */
-	if ((already_waked == 0) && pdata->usb_wakeup_exhandle)
+	if ((already_waked == 0) && pdata->usb_wakeup_exhandle) {
+#if 1
+	    struct fsl_usb2_wakeup_platform_data *pdata = ctrl->pdata;
+	    /* all the usb module related the wakeup is in lowpower mode */
+	    for (i = 0; i < 3; i++) {
+    	    if (pdata->usb_pdata[i] && pdata->usb_pdata[i]->phy_lowpower_suspend) {
+				printk(KERN_EMERG "usb_phy[%d] lowpower_mode = %d\n",
+					i, phy_in_lowpower_mode(pdata->usb_pdata[i]));
+			}
+        }
+#endif
 		pdata->usb_wakeup_exhandle();
+	}
 
 	wakeup_clk_gate(ctrl->pdata, false);
 	pdata->usb_wakeup_is_pending = false;
@@ -204,6 +215,8 @@ static int wakeup_dev_probe(struct platform_device *pdev)
 	 */
 	ctrl->wakeup_irq = platform_get_irq(pdev, 1);
 	ctrl->usb_irq = platform_get_irq(pdev, 1);
+	pdata->wakeup_irq = ctrl->wakeup_irq;
+	pdata->usb_irq = ctrl->usb_irq;
 	ctrl->thread_close = false;
 	if (ctrl->wakeup_irq != ctrl->usb_irq)
 		interrupt_flag = IRQF_DISABLED;

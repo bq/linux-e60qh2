@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2013 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright (C) 2012-2014 Freescale Semiconductor, Inc. All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -73,6 +73,7 @@ static struct cpu_op *cpu_op_tbl;
 static int cpu_op_nr;
 static bool pll1_enabled;
 static bool arm_needs_pll2_400;
+static bool audio_pll_bypass;
 
 DEFINE_SPINLOCK(mx6sl_clk_lock);
 #define SPIN_DELAY	1200000 /* in nanoseconds */
@@ -107,8 +108,7 @@ DEFINE_SPINLOCK(mx6sl_clk_lock);
 	reg = __raw_readl(timer_base + V2_TSTAT);\
 	/* Clear the GPT roll over interrupt. */ \
 	if (reg & V2_TSTAT_ROV) { \
-		reg |= V2_TSTAT_ROV;\
-		__raw_writel(reg, timer_base + V2_TSTAT);\
+		__raw_writel(V2_TSTAT_ROV, timer_base + V2_TSTAT); \
 	} \
 	gpt_cnt = __raw_readl(timer_base + V2_TCN); \
 	while (!(exp)) { \
@@ -121,13 +121,13 @@ DEFINE_SPINLOCK(mx6sl_clk_lock);
 			if (reg & V2_TSTAT_ROV) { \
 				u32 old_cnt = gpt_cnt; \
 				/* Timer has rolled over. \
-				  * Calculate the new tcik count. \
+				  * Calculate the new tick count. \
 				  */ \
 				gpt_cnt = __raw_readl(timer_base + V2_TCN); \
 				gpt_ticks -= (0xFFFFFFFF - old_cnt + gpt_cnt); \
 				/* Clear the roll over interrupt. */ \
-				reg |= V2_TSTAT_ROV;\
-				__raw_writel(reg, timer_base + V2_TSTAT);\
+				__raw_writel(V2_TSTAT_ROV, \
+						timer_base + V2_TSTAT); \
 			} \
 		} \
 	} \
@@ -429,7 +429,8 @@ static int _clk_pll_enable(struct clk *clk)
 	pllbase = _get_pll_base(clk);
 
 	reg = __raw_readl(pllbase);
-	reg &= ~ANADIG_PLL_POWER_DOWN;
+	if (clk != &pll4_audio_main_clk || !audio_pll_bypass)
+		reg &= ~ANADIG_PLL_POWER_DOWN;
 
 	/* The 480MHz PLLs have the opposite definition for power bit. */
 	if (clk == &pll3_usb_otg_main_clk || clk == &pll7_usb_host_main_clk)
@@ -442,14 +443,20 @@ static int _clk_pll_enable(struct clk *clk)
 		__raw_writel(BM_ANADIG_ANA_MISC2_CONTROL0, apll_base + HW_ANADIG_ANA_MISC2_CLR);
 
 	/* Wait for PLL to lock */
-	if (!WAIT((__raw_readl(pllbase) & ANADIG_PLL_LOCK),
-				SPIN_DELAY))
-		panic("pll enable failed\n");
-
+	if (clk != &pll4_audio_main_clk || !audio_pll_bypass) {
+		if (!WAIT((__raw_readl(pllbase) & ANADIG_PLL_LOCK),
+					SPIN_DELAY))
+			panic("pll enable failed\n");
+	}
 	/* Enable the PLL output now*/
 	reg = __raw_readl(pllbase);
-	reg &= ~ANADIG_PLL_BYPASS;
+
+	/* If audio PLL is set to 24MHz, leave it in bypass mode. */
+	if (clk != &pll4_audio_main_clk || !audio_pll_bypass)
+		reg &= ~ANADIG_PLL_BYPASS;
+
 	reg |= ANADIG_PLL_ENABLE;
+
 	__raw_writel(reg, pllbase);
 
 	return 0;
@@ -874,6 +881,9 @@ static unsigned long _clk_audio_video_get_rate(struct clk *clk)
 
 	pllbase = _get_pll_base(clk);
 
+	if (__raw_readl(pllbase) & ANADIG_PLL_BYPASS)
+		return 24000000;
+
 	test_div_sel = (__raw_readl(pllbase)
 		& ANADIG_PLL_AV_TEST_DIV_SEL_MASK)
 		>> ANADIG_PLL_AV_TEST_DIV_SEL_OFFSET;
@@ -917,6 +927,16 @@ static int _clk_audio_video_set_rate(struct clk *clk, unsigned long rate)
 	u32 test_div_sel = 2;
 	u32 control3 = 0;
 
+	pllbase = _get_pll_base(clk);
+
+	if (clk == &pll4_audio_main_clk && audio_pll_bypass) {
+		reg = __raw_readl(pllbase)
+				& ~ANADIG_PLL_SYS_DIV_SELECT_MASK
+				& ~ANADIG_PLL_AV_TEST_DIV_SEL_MASK;
+		__raw_writel(reg, pllbase);
+		return 0;
+	}
+
 	if (clk == &pll4_audio_main_clk)
 		min_clk_rate = AUDIO_VIDEO_MIN_CLK_FREQ / 4;
 	else
@@ -924,8 +944,6 @@ static int _clk_audio_video_set_rate(struct clk *clk, unsigned long rate)
 
 	if ((rate < min_clk_rate) || (rate > AUDIO_VIDEO_MAX_CLK_FREQ))
 		return -EINVAL;
-
-	pllbase = _get_pll_base(clk);
 
 	pre_div_rate = rate;
 	while (pre_div_rate < AUDIO_VIDEO_MIN_CLK_FREQ) {
@@ -985,6 +1003,9 @@ static unsigned long _clk_audio_video_round_rate(struct clk *clk,
 	u32 test_div_sel = 2;
 	u32 control3 = 0;
 	unsigned long final_rate;
+
+	if (clk == &pll4_audio_main_clk && audio_pll_bypass)
+		return 24000000;
 
 	if (clk == &pll4_audio_main_clk)
 		min_clk_rate = AUDIO_VIDEO_MIN_CLK_FREQ / 4;
@@ -1137,6 +1158,8 @@ static unsigned long _clk_arm_get_rate(struct clk *clk)
 	return clk_get_rate(clk->parent) / div;
 }
 
+extern int high_cpu_freq;
+
 static int _clk_arm_set_rate(struct clk *clk, unsigned long rate)
 {
 	int i;
@@ -1166,8 +1189,10 @@ static int _clk_arm_set_rate(struct clk *clk, unsigned long rate)
 		if (pll1_sw_clk.parent != &pll2_pfd2_400M) {
 			if (pll2_pfd2_400M.usecount == 0) {
 				/* Check if PLL2 needs to be enabled also. */
-				if (pll2_528_bus_main_clk.usecount == 0)
+				if (pll2_528_bus_main_clk.usecount == 0) {
 					pll2_528_bus_main_clk.enable(&pll2_528_bus_main_clk);
+					osc_clk.usecount++;
+				}
 				/* Ensure parent usecount is
 				  * also incremented.
 				  */
@@ -1184,6 +1209,7 @@ static int _clk_arm_set_rate(struct clk *clk, unsigned long rate)
 		if (!pll1_enabled) {
 			pll1_sys_main_clk.enable(&pll1_sys_main_clk);
 			pll1_sys_main_clk.usecount = 1;
+			osc_clk.usecount++;
 		}
 		if (cpu_op_tbl[i].pll_rate != clk_get_rate(&pll1_sys_main_clk)) {
 			if (pll1_sw_clk.parent == &pll1_sys_main_clk) {
@@ -1206,8 +1232,10 @@ static int _clk_arm_set_rate(struct clk *clk, unsigned long rate)
 				  * also decremented.
 				  */
 				pll2_528_bus_main_clk.usecount--;
-				if (pll2_528_bus_main_clk.usecount == 0)
+				if (pll2_528_bus_main_clk.usecount == 0) {
 					pll2_528_bus_main_clk.disable(&pll2_528_bus_main_clk);
+					osc_clk.usecount--;
+				}
 			}
 		}
 		arm_needs_pll2_400 = false;
@@ -1246,6 +1274,7 @@ static int _clk_arm_set_rate(struct clk *clk, unsigned long rate)
 	if (pll1_sys_main_clk.usecount == 1 && arm_needs_pll2_400) {
 		pll1_sys_main_clk.disable(&pll1_sys_main_clk);
 		pll1_sys_main_clk.usecount = 0;
+		osc_clk.usecount--;
 	}
 
 	spin_unlock_irqrestore(&mx6sl_clk_lock, flags);
@@ -1681,6 +1710,7 @@ static struct clk mmdc_ch1_axi_clk[] = {
 	.secondary = &tzasc2_clk,
 	},
 };
+
 #if defined(CONFIG_SDMA_IRAM) || defined(CONFIG_SND_MXC_SOC_IRAM)
 static struct clk ocram_clk = {
 	__INIT_CLK_DEBUG(ocram_clk)
@@ -1692,6 +1722,7 @@ static struct clk ocram_clk = {
 	.disable = _clk_disable_inwait,
 };
 #endif
+
 static unsigned long _clk_ipg_perclk_get_rate(struct clk *clk)
 {
 	u32 reg, div;
@@ -2376,14 +2407,23 @@ static int _clk_extern_audio_set_rate(struct clk *clk, unsigned long rate)
 	u32 reg, div, pre, post;
 	u32 parent_rate = clk_get_rate(clk->parent);
 
-	div = parent_rate / rate;
-	if (div == 0)
-		div++;
-	if (((parent_rate / div) != rate) || div > 64)
-		return -EINVAL;
+	if (rate == 24000000 && clk->parent == &pll4_audio_main_clk) {
+		/* If the requested rate is 24MHz,
+		  * set the PLL4 to bypass mode.
+		  */
+		audio_pll_bypass = 1;
+		pre = post = 1;
+	} else {
+		div = parent_rate / rate;
+		if (div == 0)
+			div++;
+		if (((parent_rate / div) != rate) || div > 64)
+			return -EINVAL;
 
-	__calc_pre_post_dividers(1 << 3, div, &pre, &post);
+		audio_pll_bypass = 0;
 
+		__calc_pre_post_dividers(1 << 3, div, &pre, &post);
+	}
 	reg = __raw_readl(MXC_CCM_CS1CDR);
 	reg &= ~(MXC_CCM_CS1CDR_ESAI_CLK_PRED_MASK|
 		 MXC_CCM_CS1CDR_ESAI_CLK_PODF_MASK);
@@ -2442,15 +2482,10 @@ static struct clk ssi1_clk[] = {
 	 .flags  = AHB_AUDIO_SET_POINT | CPU_FREQ_TRIG_UPDATE,
 #ifndef CONFIG_SND_MXC_SOC_IRAM
 	 .secondary = &mmdc_ch1_axi_clk[0],
-	},
 #else
-	 .secondary = &ssi1_clk[1],
-	},
-	{
-	 .parent = &mmdc_ch1_axi_clk[0],
 	 .secondary = &ocram_clk,
-	},
 #endif
+	},
 };
 
 static unsigned long _clk_ssi2_get_rate(struct clk *clk)
@@ -2523,15 +2558,10 @@ static struct clk ssi2_clk[] = {
 	 .flags  = AHB_AUDIO_SET_POINT | CPU_FREQ_TRIG_UPDATE,
 #ifndef CONFIG_SND_MXC_SOC_IRAM
 	 .secondary = &mmdc_ch1_axi_clk[0],
-	},
 #else
-	 .secondary = &ssi2_clk[1],
-	},
-	{
-	 .parent = &mmdc_ch1_axi_clk[0],
 	 .secondary = &ocram_clk,
-	},
 #endif
+	},
 };
 
 static unsigned long _clk_ssi3_get_rate(struct clk *clk)
@@ -2603,15 +2633,10 @@ static struct clk ssi3_clk[] = {
 	 .flags  = AHB_AUDIO_SET_POINT | CPU_FREQ_TRIG_UPDATE,
 #ifndef CONFIG_SND_MXC_SOC_IRAM
 	 .secondary = &mmdc_ch1_axi_clk[0],
-	},
 #else
-	 .secondary = &ssi3_clk[1],
-	},
-	{
-	 .parent = &mmdc_ch1_axi_clk[0],
 	 .secondary = &ocram_clk,
-	},
 #endif
+	},
 };
 
 static unsigned long _clk_epdc_lcdif_pix_round_rate(struct clk *clk,
@@ -3175,6 +3200,17 @@ static struct clk fec_clk[] = {
 	.parent = &mmdc_ch1_axi_clk[0],
 	.secondary = &mx6per1_clk,
 	},
+};
+
+static unsigned long _clk_fec_mdc_get_rate(struct clk *clk)
+{
+	return clk_get_rate(clk->parent);
+}
+
+static struct clk fec_mdc_clk = {
+	__INIT_CLK_DEBUG(fec_mdc_clk)
+	.parent = &ipg_clk,
+	.get_rate = _clk_fec_mdc_get_rate,
 };
 
 static struct clk ecspi_clk[] = {
@@ -3956,7 +3992,8 @@ static struct clk_lookup lookups[] = {
 	_REGISTER_CLOCK("mxc_pwm.1", NULL, pwm_clk[1]),
 	_REGISTER_CLOCK("mxc_pwm.2", NULL, pwm_clk[2]),
 	_REGISTER_CLOCK("mxc_pwm.3", NULL, pwm_clk[3]),
-	_REGISTER_CLOCK("fec.0", NULL, fec_clk[0]),
+	_REGISTER_CLOCK(NULL, "fec_clk", fec_clk[0]),
+	_REGISTER_CLOCK(NULL, "fec_mdc_clk", fec_mdc_clk),
 	_REGISTER_CLOCK(NULL, "usboh3_clk", usboh3_clk[0]),
 	_REGISTER_CLOCK(NULL, "usb_phy1_clk", usb_phy1_clk),
 	_REGISTER_CLOCK(NULL, "usb_phy3_clk", usb_phy3_clk),
@@ -4118,6 +4155,8 @@ int __init mx6sl_clocks_init(unsigned long ckil, unsigned long osc,
 	/* lcdif pix - PLL5 as parent */
 	clk_set_parent(&lcdif_pix_clk, &pll5_video_main_clk);
 
+	clk_set_parent(&ssi2_clk[0], &pll4_audio_main_clk);
+
 	lp_high_freq = 0;
 	lp_med_freq = 0;
 
@@ -4135,6 +4174,9 @@ int __init mx6sl_clocks_init(unsigned long ckil, unsigned long osc,
 	max_arm_wait_clk = (12 * ipg_clk_rate) / 5;
 	wait_mode_arm_podf = parent_rate / max_arm_wait_clk;
 
+#if 1
+	_clk_disable(&gpu2d_core_clk);
+#endif
 	return 0;
 
 }

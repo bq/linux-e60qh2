@@ -1,6 +1,6 @@
 /****************************************************************************
 *
-*    Copyright (C) 2005 - 2013 by Vivante Corp.
+*    Copyright (C) 2005 - 2012 by Vivante Corp.
 *    Copyright (C) 2011-2012 Freescale Semiconductor, Inc.
 *
 *    This program is free software; you can redistribute it and/or modify
@@ -18,6 +18,8 @@
 *    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 *
 *****************************************************************************/
+
+
 
 
 #include <linux/device.h>
@@ -38,31 +40,6 @@
 
 #ifdef CONFIG_ANDROID_RESERVED_MEMORY_ACCOUNT
 #    include <linux/resmem_account.h>
-#    include <linux/kernel.h>
-#    include <linux/mm.h>
-#    include <linux/oom.h>
-#    include <linux/sched.h>
-#    include <linux/notifier.h>
-
-struct task_struct *lowmem_deathpending;
-
-static int
-task_notify_func(struct notifier_block *self, unsigned long val, void *data);
-
-static struct notifier_block task_nb = {
-	.notifier_call	= task_notify_func,
-};
-
-static int
-task_notify_func(struct notifier_block *self, unsigned long val, void *data)
-{
-	struct task_struct *task = data;
-
-	if (task == lowmem_deathpending)
-		lowmem_deathpending = NULL;
-
-	return NOTIFY_OK;
-}
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,5,0)
@@ -146,6 +123,9 @@ module_param(logFileSize,uint, 0644);
 static int showArgs = 0;
 module_param(showArgs, int, 0644);
 
+int gpu3DMinClock = 0;
+module_param(gpu3DMinClock, int, 0644);
+
 #if ENABLE_GPU_CLOCK_BY_DRIVER
     unsigned long coreClock = 156000000;
     module_param(coreClock, ulong, 0644);
@@ -178,9 +158,6 @@ static struct file_operations driver_fops =
     .open       = drv_open,
     .release    = drv_release,
     .unlocked_ioctl = drv_ioctl,
-#ifdef HAVE_COMPAT_IOCTL
-    .compat_ioctl = drv_ioctl,
-#endif
     .mmap       = drv_mmap,
 };
 
@@ -231,7 +208,7 @@ int drv_open(
         gcmkONERROR(gcvSTATUS_INVALID_ARGUMENT);
     }
 
-    data = kmalloc(sizeof(gcsHAL_PRIVATE_DATA), GFP_KERNEL | __GFP_NOWARN);
+    data = kmalloc(sizeof(gcsHAL_PRIVATE_DATA), GFP_KERNEL);
 
     if (data == gcvNULL)
     {
@@ -493,7 +470,7 @@ long drv_ioctl(
     }
 
     copyLen = copy_from_user(
-        &iface, gcmUINT64_TO_PTR(drvArgs.InputBuffer), sizeof(gcsHAL_INTERFACE)
+        &iface, drvArgs.InputBuffer, sizeof(gcsHAL_INTERFACE)
         );
 
     if (copyLen != 0)
@@ -571,26 +548,25 @@ long drv_ioctl(
 
     if (gcmIS_SUCCESS(status) && (iface.command == gcvHAL_LOCK_VIDEO_MEMORY))
     {
-        gcuVIDMEM_NODE_PTR node = gcmUINT64_TO_PTR(iface.u.LockVideoMemory.node);
         /* Special case for mapped memory. */
         if ((data->mappedMemory != gcvNULL)
-        &&  (node->VidMem.memory->object.type == gcvOBJ_VIDMEM)
+        &&  (iface.u.LockVideoMemory.node->VidMem.memory->object.type == gcvOBJ_VIDMEM)
         )
         {
             /* Compute offset into mapped memory. */
             gctUINT32 offset
-                = (gctUINT8 *) gcmUINT64_TO_PTR(iface.u.LockVideoMemory.memory)
+                = (gctUINT8 *) iface.u.LockVideoMemory.memory
                 - (gctUINT8 *) device->contiguousBase;
 
             /* Compute offset into user-mapped region. */
             iface.u.LockVideoMemory.memory =
-                gcmPTR_TO_UINT64((gctUINT8 *) data->mappedMemory + offset);
+                (gctUINT8 *) data->mappedMemory + offset;
         }
     }
 
     /* Copy data back to the user. */
     copyLen = copy_to_user(
-        gcmUINT64_TO_PTR(drvArgs.OutputBuffer), &iface, sizeof(gcsHAL_INTERFACE)
+        drvArgs.OutputBuffer, &iface, sizeof(gcsHAL_INTERFACE)
         );
 
     if (copyLen != 0)
@@ -618,7 +594,7 @@ static int drv_mmap(
     struct vm_area_struct* vma
     )
 {
-    gceSTATUS status = gcvSTATUS_OK;
+    gceSTATUS status;
     gcsHAL_PRIVATE_DATA_PTR data;
     gckGALDEVICE device;
 
@@ -663,7 +639,7 @@ static int drv_mmap(
 
 #if !gcdPAGED_MEMORY_CACHEABLE
     vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
-    vma->vm_flags    |= gcdVM_FLAGS;
+    vma->vm_flags    |= VM_IO | VM_DONTCOPY | VM_DONTEXPAND;
 #endif
     vma->vm_pgoff     = 0;
 
@@ -706,18 +682,41 @@ static int drv_mmap(
         }
 
         data->mappedMemory = (gctPOINTER) vma->vm_start;
-
-        /* Success. */
-        gcmkFOOTER_NO();
-        return 0;
     }
 
+    /* Success. */
+    gcmkFOOTER_NO();
+    return 0;
 
 OnError:
     gcmkFOOTER();
     return -ENOTTY;
 }
 
+gckKERNEL
+_GetValidKernel(
+    gckGALDEVICE Device
+    )
+{
+    if (Device->kernels[gcvCORE_MAJOR])
+    {
+        return Device->kernels[gcvCORE_MAJOR];
+    }
+    else
+    if (Device->kernels[gcvCORE_2D])
+    {
+        return Device->kernels[gcvCORE_2D];
+    }
+    else
+    if (Device->kernels[gcvCORE_VG])
+    {
+        return Device->kernels[gcvCORE_VG];
+    }
+    else
+    {
+        return gcvNULL;
+    }
+}
 
 #if !USE_PLATFORM_DRIVER
 static int __init drv_init(void)
@@ -857,8 +856,7 @@ static int drv_init(struct device *pdev)
     }
 
 #ifdef CONFIG_ANDROID_RESERVED_MEMORY_ACCOUNT
-    task_free_register(&task_nb);
-    viv_gpu_resmem_handler.data = device->kernels[gcvCORE_MAJOR];
+    viv_gpu_resmem_handler.data = _GetValidKernel(device);
     register_reserved_memory_account(&viv_gpu_resmem_handler);
 #endif
 
@@ -943,7 +941,6 @@ static void drv_exit(void)
     gcmkHEADER();
 
 #ifdef CONFIG_ANDROID_RESERVED_MEMORY_ACCOUNT
-    task_free_unregister(&task_nb);
     unregister_reserved_memory_account(&viv_gpu_resmem_handler);
 #endif
 
@@ -1100,7 +1097,7 @@ static int __devinit gpu_probe(struct platform_device *pdev)
     return ret;
 }
 
-static int __devinit gpu_remove(struct platform_device *pdev)
+static int __devexit gpu_remove(struct platform_device *pdev)
 {
     gcmkHEADER();
 #if gcdENABLE_FSCALE_VAL_ADJUST
@@ -1112,7 +1109,7 @@ static int __devinit gpu_remove(struct platform_device *pdev)
     return 0;
 }
 
-static int __devinit gpu_suspend(struct platform_device *dev, pm_message_t state)
+static int gpu_suspend(struct platform_device *dev, pm_message_t state)
 {
     gceSTATUS status;
     gckGALDEVICE device;
@@ -1162,7 +1159,7 @@ static int __devinit gpu_suspend(struct platform_device *dev, pm_message_t state
     return 0;
 }
 
-static int __devinit gpu_resume(struct platform_device *dev)
+static int gpu_resume(struct platform_device *dev)
 {
     gceSTATUS status;
     gckGALDEVICE device;
@@ -1241,27 +1238,39 @@ static const struct of_device_id mxs_gpu_dt_ids[] = {
 MODULE_DEVICE_TABLE(of, mxs_gpu_dt_ids);
 
 #ifdef CONFIG_PM
-int gpu_runtime_suspend(struct device *dev)
+static int gpu_runtime_suspend(struct device *dev)
 {
 	release_bus_freq(BUS_FREQ_HIGH);
 	return 0;
 }
 
-int gpu_runtime_resume(struct device *dev)
+static int gpu_runtime_resume(struct device *dev)
 {
 	request_bus_freq(BUS_FREQ_HIGH);
 	return 0;
 }
 
+static int gpu_system_suspend(struct device *dev)
+{
+	pm_message_t state={0};
+	return gpu_suspend(to_platform_device(dev), state);
+}
+
+static int gpu_system_resume(struct device *dev)
+{
+	return gpu_resume(to_platform_device(dev));
+}
+
 static const struct dev_pm_ops gpu_pm_ops = {
 	SET_RUNTIME_PM_OPS(gpu_runtime_suspend, gpu_runtime_resume, NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(gpu_system_suspend, gpu_system_resume)
 };
 #endif
 #endif
 
 static struct platform_driver gpu_driver = {
     .probe      = gpu_probe,
-    .remove     = gpu_remove,
+    .remove     = __devexit_p(gpu_remove),
 
     .suspend    = gpu_suspend,
     .resume     = gpu_resume,

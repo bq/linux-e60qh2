@@ -188,6 +188,8 @@ int update_ddr_freq(int ddr_rate)
 	if (ddr_rate == curr_ddr_rate)
 		return 0;
 
+	printk(KERN_DEBUG"%s(%d) %s(%d)\n",__FILE__,__LINE__,__FUNCTION__,ddr_rate);
+
 	if (low_bus_freq_mode || audio_bus_freq_mode)
 		dll_off = true;
 

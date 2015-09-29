@@ -1,5 +1,5 @@
 /* Copyright (c) 2008-2010, Advanced Micro Devices. All rights reserved.
- * Copyright (C) 2008-2012 Freescale Semiconductor, Inc.
+ * Copyright (C) 2008-2011 Freescale Semiconductor, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,6 +15,10 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  * 02110-1301, USA.
  *
+ */
+
+/*
+ * Copyright (C) 2010 Freescale Semiconductor, Inc. All Rights Reserved.
  */
 
 #include "gsl_hal.h"
@@ -45,7 +49,6 @@ extern int gmem_size;
 extern phys_addr_t gpu_reserved_mem;
 extern int gpu_reserved_mem_size;
 extern int gpu_2d_irq, gpu_3d_irq;
-extern int enable_mmu;
 
 
 KGSLHAL_API int
@@ -118,7 +121,8 @@ kgsl_hal_init(void)
 	hal->has_z160 = 0;
     }
 
-    gsl_driver.enable_mmu = enable_mmu;
+    /* there is still some problem to enable mmu currently */
+    gsl_driver.enable_mmu = 0;
 
     /* setup register space */
     if (hal->has_z430) {

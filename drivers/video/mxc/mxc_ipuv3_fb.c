@@ -105,15 +105,12 @@ struct mxcfb_info {
 
 	int vsync_pre_report_active;
 	ktime_t vsync_pre_timestamp;
-	ktime_t vsync_nf_timestamp;
 	struct workqueue_struct *vsync_pre_queue;
 	struct work_struct vsync_pre_work;
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	struct early_suspend fbdrv_earlysuspend;
 #endif
-	int panel_width_mm;
-	int panel_height_mm;
 };
 
 struct mxcfb_pfmt {
@@ -470,15 +467,9 @@ static int mxcfb_set_par(struct fb_info *fbi)
 	if (mxc_fbi->ovfbi)
 		mxc_fbi_fg = (struct mxcfb_info *)mxc_fbi->ovfbi->par;
 
-	if (mxc_fbi->ovfbi && mxc_fbi_fg) {
-		if (mxc_fbi_fg->cur_blank == FB_BLANK_UNBLANK) {
-			dev_warn(fbi->device, "overlay is still on.\n");
-			return 0;
-		}
-		if ((mxc_fbi_fg->next_blank == FB_BLANK_UNBLANK) &&
-			mxcfb_need_to_set_par(mxc_fbi->ovfbi))
+	if (mxc_fbi->ovfbi && mxc_fbi_fg)
+		if (mxc_fbi_fg->next_blank == FB_BLANK_UNBLANK)
 			ovfbi_enable = true;
-	}
 
 	if (!mxcfb_need_to_set_par(fbi))
 		return 0;
@@ -502,7 +493,6 @@ static int mxcfb_set_par(struct fb_info *fbi)
 		ipu_disable_irq(mxc_fbi_fg->ipu, mxc_fbi_fg->ipu_ch_nf_irq);
 		ipu_disable_channel(mxc_fbi_fg->ipu, mxc_fbi_fg->ipu_ch, true);
 		ipu_uninit_channel(mxc_fbi_fg->ipu, mxc_fbi_fg->ipu_ch);
-		mxc_fbi_fg->cur_blank = FB_BLANK_POWERDOWN;
 	}
 
 	ipu_clear_irq(mxc_fbi->ipu, mxc_fbi->ipu_ch_irq);
@@ -686,10 +676,6 @@ static int mxcfb_set_par(struct fb_info *fbi)
 	}
 
 	mxc_fbi->cur_var = fbi->var;
-	if (ovfbi_enable) {
-		mxc_fbi_fg->cur_blank = FB_BLANK_UNBLANK;
-		mxc_fbi_fg->cur_var = mxc_fbi->ovfbi->var;
-	}
 
 	return retval;
 }
@@ -917,16 +903,8 @@ static int mxcfb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 			var->pixclock);
 	}
 
-	if (var->height == 0 && mxc_fbi->panel_height_mm)
-		var->height = mxc_fbi->panel_height_mm;
-	else if (var->height == 0)
-		var->height = -1;
-
-	if (var->width == 0 && mxc_fbi->panel_width_mm)
-		var->width = mxc_fbi->panel_width_mm;
-	else if (var->width == 0)
-		var->width = -1;
-
+	var->height = -1;
+	var->width = -1;
 	var->grayscale = 0;
 
 	return 0;
@@ -1196,8 +1174,6 @@ static int mxcfb_ioctl(struct fb_info *fbi, unsigned int cmd, unsigned long arg)
 		}
 	case MXCFB_WAIT_FOR_VSYNC:
 		{
-			unsigned long flags;
-			unsigned long long timestamp;
 			if (mxc_fbi->ipu_ch == MEM_FG_SYNC) {
 				/* BG should poweron */
 				struct mxcfb_info *bg_mxcfbi = NULL;
@@ -1225,18 +1201,7 @@ static int mxcfb_ioctl(struct fb_info *fbi, unsigned int cmd, unsigned long arg)
 			ipu_clear_irq(mxc_fbi->ipu, mxc_fbi->ipu_ch_nf_irq);
 			ipu_enable_irq(mxc_fbi->ipu, mxc_fbi->ipu_ch_nf_irq);
 			retval = wait_for_completion_interruptible_timeout(
-				&mxc_fbi->vsync_complete, HZ/10);
-
-			spin_lock_irqsave(&mxc_fbi->lock, flags);
-			timestamp = ktime_to_ns(mxc_fbi->vsync_nf_timestamp);
-			spin_unlock_irqrestore(&mxc_fbi->lock, flags);
-			dev_vdbg(fbi->device, "ts = %llu", timestamp);
-
-			if (copy_to_user((void *)arg, &timestamp, sizeof(timestamp))) {
-				retval = -EFAULT;
-				break;
-			}
-
+				&mxc_fbi->vsync_complete, 1 * HZ);
 			if (retval == 0) {
 				dev_err(fbi->device,
 					"MXCFB_WAIT_FOR_VSYNC: timeout %d\n",
@@ -1742,9 +1707,6 @@ static irqreturn_t mxcfb_nf_irq_handler(int irq, void *dev_id)
 	struct fb_info *fbi = dev_id;
 	struct mxcfb_info *mxc_fbi = fbi->par;
 
-	spin_lock(&mxc_fbi->lock);
-	mxc_fbi->vsync_nf_timestamp = ktime_get();
-	spin_unlock(&mxc_fbi->lock);
 	complete(&mxc_fbi->vsync_complete);
 	return IRQ_HANDLED;
 }
@@ -1758,6 +1720,7 @@ static irqreturn_t mxcfb_vsync_pre_irq_handler(int irq, void *dev_id)
 	mxc_fbi->vsync_pre_timestamp = ktime_get();
 	spin_unlock(&mxc_fbi->lock);
 	queue_work(mxc_fbi->vsync_pre_queue, &mxc_fbi->vsync_pre_work);
+
 	return IRQ_HANDLED;
 }
 
@@ -2203,18 +2166,6 @@ static int mxcfb_register(struct fb_info *fbi)
 	}
 	ipu_disable_irq(mxcfbi->ipu, mxcfbi->ipu_ch_nf_irq);
 
-	if (mxcfbi->ipu_vsync_pre_irq != -1) {
-		if (ipu_request_irq(mxcfbi->ipu, mxcfbi->ipu_vsync_pre_irq,
-				    mxcfb_vsync_pre_irq_handler, 0,
-				    MXCFB_NAME, fbi) != 0) {
-			dev_err(fbi->device, "Error registering VSYNC irq "
-					     "handler.\n");
-			ret = -EBUSY;
-			goto err2;
-		}
-		ipu_disable_irq(mxcfbi->ipu, mxcfbi->ipu_vsync_pre_irq);
-	}
-
 	if (mxcfbi->ipu_alp_ch_irq != -1)
 		if (ipu_request_irq(mxcfbi->ipu, mxcfbi->ipu_alp_ch_irq,
 				mxcfb_alpha_irq_handler, IPU_IRQF_ONESHOT,
@@ -2222,7 +2173,7 @@ static int mxcfb_register(struct fb_info *fbi)
 			dev_err(fbi->device, "Error registering alpha irq "
 					"handler.\n");
 			ret = -EBUSY;
-			goto err3;
+			goto err2;
 		}
 
 	if (!mxcfbi->late_init) {
@@ -2234,7 +2185,7 @@ static int mxcfb_register(struct fb_info *fbi)
 		console_unlock();
 		if (ret < 0) {
 			dev_err(fbi->device, "Error fb_set_var ret:%d\n", ret);
-			goto err4;
+			goto err3;
 		}
 
 		if (mxcfbi->next_blank == FB_BLANK_UNBLANK) {
@@ -2244,7 +2195,7 @@ static int mxcfb_register(struct fb_info *fbi)
 			if (ret < 0) {
 				dev_err(fbi->device,
 					"Error fb_blank ret:%d\n", ret);
-				goto err5;
+				goto err4;
 			}
 		}
 	} else {
@@ -2261,12 +2212,13 @@ static int mxcfb_register(struct fb_info *fbi)
 		}
 	}
 
+
 	ret = register_framebuffer(fbi);
 	if (ret < 0)
-		goto err6;
+		goto err5;
 
 	return ret;
-err6:
+err5:
 	if (mxcfbi->next_blank == FB_BLANK_UNBLANK) {
 		console_lock();
 		if (!mxcfbi->late_init)
@@ -2278,13 +2230,10 @@ err6:
 		}
 		console_unlock();
 	}
-err5:
 err4:
+err3:
 	if (mxcfbi->ipu_alp_ch_irq != -1)
 		ipu_free_irq(mxcfbi->ipu, mxcfbi->ipu_alp_ch_irq, fbi);
-err3:
-	if (mxcfbi->ipu_vsync_pre_irq != -1)
-		ipu_free_irq(mxcfbi->ipu, mxcfbi->ipu_vsync_pre_irq, fbi);
 err2:
 	ipu_free_irq(mxcfbi->ipu, mxcfbi->ipu_ch_nf_irq, fbi);
 err1:
@@ -2429,9 +2378,6 @@ static int mxcfb_probe(struct platform_device *pdev)
 	mxcfbi->ipu_int_clk = plat_data->int_clk;
 	mxcfbi->late_init = plat_data->late_init;
 	mxcfbi->first_set_par = true;
-	mxcfbi->panel_width_mm = plat_data->panel_width_mm;
-	mxcfbi->panel_height_mm = plat_data->panel_height_mm;
-
 	ret = mxcfb_dispdrv_init(pdev, fbi);
 	if (ret < 0)
 		goto init_dispdrv_failed;

@@ -18,6 +18,10 @@
 DEFINE_MUTEX(pm_mutex);
 EXPORT_SYMBOL(pm_mutex);
 
+#include "../../drivers/misc/ntx-misc.h"
+#include "../../arch/arm/mach-mx6/ntx_hwconfig.h"
+extern volatile NTX_HWCONFIG *gptHWCFG;
+
 #ifdef CONFIG_PM_SLEEP
 
 /* Routines for PM-transition notifications */
@@ -213,6 +217,62 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 
 power_attr(state);
 
+extern int gSleep_Mode_Suspend;
+extern int ntx_get_homepad_enabled_status(void);
+static ssize_t state_extended_show(struct kobject *kobj, struct kobj_attribute *attr,
+			  char *buf)
+{
+	char *s = buf;
+	s += sprintf(s, "%d\n", gSleep_Mode_Suspend);
+	return (s - buf);
+}
+
+static ssize_t state_extended_store(struct kobject *kobj, struct kobj_attribute *attr,
+			   const char *buf, size_t n)
+{
+	if ('1' == *buf) {
+
+		if(1 == gSleep_Mode_Suspend) {
+			return n;
+		}
+
+		gSleep_Mode_Suspend = 1;
+		if(36==gptHWCFG->m_val.bPCB || 40==gptHWCFG->m_val.bPCB || 49==gptHWCFG->m_val.bPCB || 0!=gptHWCFG->m_val.bHOME_LED_PWM || 16==gptHWCFG->m_val.bKeyPad || 18==gptHWCFG->m_val.bKeyPad)
+		{
+			// E60Q3X/E60Q5X/E60QDX/Key pad with HOMEPAD
+			msp430_homepad_enable(0);
+		}
+	}
+	else {
+
+		if(0 == gSleep_Mode_Suspend) {
+			return n;
+		}
+
+		gSleep_Mode_Suspend = 0;
+//	printk ("[%s-%d] %s() %d\n",__FILE__,__LINE__,__func__,gSleep_Mode_Suspend);
+		if(36==gptHWCFG->m_val.bPCB || 40==gptHWCFG->m_val.bPCB || 49==gptHWCFG->m_val.bPCB || 0!=gptHWCFG->m_val.bHOME_LED_PWM || 16==gptHWCFG->m_val.bKeyPad || 18==gptHWCFG->m_val.bKeyPad) 
+		{
+			// E60Q3X/E60Q5X/E60QDX/Key pad with HOMEPAD
+			if(0!=ntx_get_homepad_enabled_status()){
+				msp430_homepad_enable(2);
+			}
+		}
+	}
+
+	return n;
+}
+
+//power_attr(state_extended);
+static struct kobj_attribute state_extended_attr = {
+         .attr   = {
+                 .name = "state-extended",
+                 .mode = 0644,
+         },
+         .show   = state_extended_show,
+         .store  = state_extended_store,
+};
+ 
 #ifdef CONFIG_PM_SLEEP
 /*
  * The 'wakeup_count' attribute, along with the functions defined in
@@ -367,6 +427,7 @@ static struct attribute * g[] = {
 	&wake_unlock_attr.attr,
 #endif
 #endif
+	&state_extended_attr.attr,
 	NULL,
 };
 

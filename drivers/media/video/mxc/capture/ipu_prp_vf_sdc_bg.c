@@ -188,6 +188,8 @@ static int prpvf_start(void *private)
 	if (err != 0)
 		goto out_4;
 
+	ipu_csi_enable_mclk_if(cam->ipu, CSI_MCLK_VF, cam->csi, true, true);
+
 	if (cam->vf_bufs_vaddr[0]) {
 		dma_free_coherent(0, cam->vf_bufs_size[0],
 				  cam->vf_bufs_vaddr[0], cam->vf_bufs[0]);
@@ -360,6 +362,8 @@ static int prpvf_stop(void *private)
 
 	ipu_free_irq(disp_ipu, IPU_IRQ_BG_SF_END, cam);
 
+	ipu_free_irq(cam->ipu, IPU_IRQ_PRP_VF_OUT_EOF, cam);
+
 	ipu_disable_channel(cam->ipu, CSI_PRP_VF_MEM, true);
 	ipu_disable_channel(cam->ipu, MEM_ROT_VF_MEM, true);
 	ipu_uninit_channel(cam->ipu, CSI_PRP_VF_MEM);
@@ -382,6 +386,8 @@ static int prpvf_stop(void *private)
 		return -EPERM;
 	}
 #endif
+
+	ipu_csi_enable_mclk_if(cam->ipu, CSI_MCLK_VF, cam->csi, false, false);
 
 	if (cam->vf_bufs_vaddr[0]) {
 		dma_free_coherent(0, cam->vf_bufs_size[0],
@@ -438,11 +444,6 @@ static int prp_vf_enable_csi(void *private)
 static int prp_vf_disable_csi(void *private)
 {
 	cam_data *cam = (cam_data *) private;
-
-	/* free csi eof irq firstly.
-	 * when disable csi, wait for idmac eof.
-	 * it requests eof irq again */
-	ipu_free_irq(cam->ipu, IPU_IRQ_PRP_VF_OUT_EOF, cam);
 
 	return ipu_disable_csi(cam->ipu, cam->csi);
 }

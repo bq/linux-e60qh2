@@ -479,8 +479,6 @@ kgsl_memarena_alloc(gsl_memarena_t *memarena, gsl_flags_t flags, int size, gsl_m
     unsigned int  blksize;
     unsigned int  baseaddr, alignedbaseaddr, alignfragment;
     int           freeblk, alignmentshift;
-    memblk_t *ptrbest = NULL;
-    unsigned int fitsize = ~0UL;
 
     kgsl_log_write( KGSL_LOG_GROUP_MEMORY | KGSL_LOG_LEVEL_TRACE,
                     "--> int kgsl_memarena_alloc(gsl_memarena_t *memarena=0x%08x, gsl_flags_t flags=0x%08x, int size=%d, gsl_memdesc_t *memdesc=%M)\n", memarena, flags, size, memdesc );
@@ -544,33 +542,17 @@ kgsl_memarena_alloc(gsl_memarena_t *memarena, gsl_flags_t flags, int size, gsl_m
 
     do
     { 
-	int aba;
         // align base address
-	baseaddr = ptrfree->blkaddr + memarena->gpubaseaddr;
-	aba = gsl_memarena_alignaddr(baseaddr, alignmentshift);
+        baseaddr = ptrfree->blkaddr + memarena->gpubaseaddr;
+        alignedbaseaddr = gsl_memarena_alignaddr(baseaddr, alignmentshift);
        
-	if (aba - baseaddr == 0 && ptrfree->blksize == blksize) {
-		ptrbest = ptrfree;
-		alignfragment = aba - baseaddr;
-		alignedbaseaddr = aba;
-		result  = GSL_SUCCESS;
-		break;
-	}
+        alignfragment = alignedbaseaddr - baseaddr;
 
-	if ((ptrfree->blksize >= blksize + aba - baseaddr) &&
-		(fitsize > ptrfree->blksize)) {
-		fitsize = ptrfree->blksize;
-		alignfragment = aba - baseaddr;
-		alignedbaseaddr = aba;
-		result  = GSL_SUCCESS;
-		ptrbest = ptrfree;
-	}
+        if (ptrfree->blksize >= blksize + alignfragment)
+        {
+            result  = GSL_SUCCESS;
+            freeblk = 1;
 
-	ptrfree = ptrfree->next;
-
-    } while (ptrfree != memarena->freelist.allocrover);
-
-	if (ptrbest) {
             memdesc->gpuaddr = alignedbaseaddr;
             memdesc->hostptr = kgsl_memarena_gethostptr(memarena, memdesc->gpuaddr);
             memdesc->size    = blksize;
@@ -579,41 +561,50 @@ kgsl_memarena_alloc(gsl_memarena_t *memarena, gsl_flags_t flags, int size, gsl_m
             {
                 // insert new node to handle newly created (small) fragment
                 p = kgsl_memarena_getmemblknode(memarena);
-		p->blkaddr = ptrbest->blkaddr;
+                p->blkaddr = ptrfree->blkaddr;
                 p->blksize = alignfragment;
 
-		p->next = ptrbest;
-		p->prev = ptrbest->prev;
-		ptrbest->prev->next = p;
-		ptrbest->prev       = p;
+                p->next = ptrfree;
+                p->prev = ptrfree->prev;
+                ptrfree->prev->next = p;
+                ptrfree->prev       = p;
 
-		if (ptrbest == memarena->freelist.head)
-			memarena->freelist.head = p;
+                if (ptrfree == memarena->freelist.head)
+                {
+                    memarena->freelist.head = p;
+                }
             }
 
-		ptrbest->blkaddr += alignfragment + blksize;
-		ptrbest->blksize -= alignfragment + blksize;
+            ptrfree->blkaddr += alignfragment + blksize;
+            ptrfree->blksize -= alignfragment + blksize;
 
-		memarena->freelist.allocrover = ptrbest;
+            memarena->freelist.allocrover = ptrfree;
 
-		if (ptrbest->blksize == 0 && ptrbest != ptrlast) {
-			ptrbest->prev->next = ptrbest->next;
-			ptrbest->next->prev = ptrbest->prev;
+            if (ptrfree->blksize == 0 && ptrfree != ptrlast)
+            {
+                ptrfree->prev->next = ptrfree->next;
+                ptrfree->next->prev = ptrfree->prev;
+                if (ptrfree == memarena->freelist.head)
+                {
+                    memarena->freelist.head = ptrfree->next;
+                }
+                if (ptrfree == memarena->freelist.allocrover)
+                {
+                    memarena->freelist.allocrover = ptrfree->next;
+                }
+                if (ptrfree == memarena->freelist.freerover)
+                {
+                    memarena->freelist.freerover = ptrfree->prev;
+                }
+                p       = ptrfree;
+                ptrfree = ptrfree->prev;
+                kgsl_memarena_releasememblknode(memarena, p);
+            }
+        }
 
-			if (ptrbest == memarena->freelist.head)
-				memarena->freelist.head = ptrbest->next;
+        ptrfree = ptrfree->next;
 
-			if (ptrbest == memarena->freelist.allocrover)
-				memarena->freelist.allocrover = ptrbest->next;
-
-			if (ptrbest == memarena->freelist.freerover)
-				memarena->freelist.freerover = ptrbest->prev;
-
-			p       = ptrbest;
-			ptrbest = ptrbest->prev;
-			kgsl_memarena_releasememblknode(memarena, p);
-		}
-	}
+    } while (!freeblk && ptrfree != memarena->freelist.allocrover);
 
     GSL_MEMARENA_UNLOCK();
 

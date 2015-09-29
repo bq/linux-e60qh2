@@ -2144,6 +2144,10 @@ static int fbcon_switch(struct vc_data *vc)
 	struct fb_var_screeninfo var;
 	int i, ret, prev_console, charcnt = 256;
 
+#ifndef CONFIG_ANDROID//[
+	return 0;
+#endif //]!CONFIG_ANDROID
+
 	info = registered_fb[con2fb_map[vc->vc_num]];
 	ops = info->fbcon_par;
 

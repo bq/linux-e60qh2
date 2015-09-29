@@ -45,7 +45,6 @@
 #include <linux/fec.h>
 #include <linux/memblock.h>
 #include <linux/gpio.h>
-#include <linux/ion.h>
 #include <linux/etherdevice.h>
 #include <linux/regulator/anatop-regulator.h>
 #include <linux/regulator/consumer.h>
@@ -68,10 +67,12 @@
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/time.h>
-#include <mach/common.h>
 
-#ifdef CONFIG_IMX_PCIE
-#include <linux/wakelock.h>
+#ifdef CONFIG_MFD_WM831X
+#include <linux/mfd/wm831x/core.h>
+#include <linux/mfd/wm831x/pdata.h>
+#include <linux/mfd/wm831x/regulator.h>
+#include <linux/mfd/wm831x/gpio.h>
 #endif
 
 #include "usb.h"
@@ -97,7 +98,7 @@
 
 #ifdef CONFIG_IMX_PCIE
 #define HDMIDONGLE_PCIE_PWR_EN	IMX_GPIO_NR(3, 7) /*fake pcie power enable */
-#define HDMIDONGLE_PCIE_RST 	IMX_GPIO_NR(3, 9)
+#define HDMIDONGLE_PCIE_RST     IMX_GPIO_NR(3, 9)
 #define HDMIDONGLE_PCIE_WAKE	IMX_GPIO_NR(3, 22)
 #define HDMIDONGLE_PCIE_DIS		IMX_GPIO_NR(3, 10)
 #endif
@@ -182,6 +183,115 @@ static inline void mx6q_hdmidongle_init_uart(void)
 		imx6q_add_imx_uart(1, NULL);
 	imx6q_add_imx_uart(0, NULL);
 	imx6q_add_imx_uart(3, NULL);
+}
+
+static int mx6q_hdmidongle_spi_cs[] = {
+	HDMIDONGLE_ECSPI2_CS0,
+};
+
+static const struct spi_imx_master mx6q_hdmidongle_spi_data __initconst = {
+	.chipselect     = mx6q_hdmidongle_spi_cs,
+	.num_chipselect = ARRAY_SIZE(mx6q_hdmidongle_spi_cs),
+};
+
+
+
+#ifdef CONFIG_MFD_WM831X
+#if 0
+/* 1.4125, 1.4125. 1.5 */
+#define WM831X_DC1_ON_CONFIG_VAL            (0x48<<WM831X_DC1_ON_VSEL_SHIFT)
+#define WM831X_DC2_ON_CONFIG_VAL            (0x48<<WM831X_DC2_ON_VSEL_SHIFT)
+#define WM831X_DC3_ON_CONFIG_VAL            (0x1A<<WM831X_DC3_ON_VSEL_SHIFT)
+#else
+/* 1.375, 1.375. 1.5 */
+
+#define WM831X_DC1_ON_CONFIG_VAL            (0x44<<WM831X_DC1_ON_VSEL_SHIFT)
+#define WM831X_DC2_ON_CONFIG_VAL            (0x44<<WM831X_DC2_ON_VSEL_SHIFT)
+#define WM831X_DC3_ON_CONFIG_VAL            (0x1A<<WM831X_DC3_ON_VSEL_SHIFT)
+
+#endif
+
+#define WM831X_DC1_DVS_MODE_VAL             (0x02<<WM831X_DC1_DVS_SRC_SHIFT)
+#define WM831X_DC2_DVS_MODE_VAL             (0x02<<WM831X_DC2_DVS_SRC_SHIFT)
+
+#define WM831X_DC1_DVS_CONTROL_VAL           (0x20<<WM831X_DC1_DVS_VSEL_SHIFT)
+#define WM831X_DC2_DVS_CONTROL_VAL           (0x20<<WM831X_DC2_DVS_VSEL_SHIFT)
+
+#define WM831X_DC1_DVS_MASK                  (WM831X_DC1_DVS_SRC_MASK|WM831X_DC1_DVS_VSEL_MASK)
+#define WM831X_DC2_DVS_MASK                  (WM831X_DC2_DVS_SRC_MASK|WM831X_DC1_DVS_VSEL_MASK)
+
+#define WM831X_DC1_DVS_VAL                   (WM831X_DC1_DVS_MODE_VAL|WM831X_DC1_DVS_CONTROL_VAL)
+#define WM831X_DC2_DVS_VAL                   (WM831X_DC2_DVS_MODE_VAL|WM831X_DC2_DVS_CONTROL_VAL)
+
+#define WM831X_GPN_FN_VAL_HW_EN              (0x0A<<WM831X_GPN_FN_SHIFT)
+#define WM831X_GPN_FN_VAL_HW_CTL             (0x0C<<WM831X_GPN_FN_SHIFT)
+#define WM831X_GPN_FN_VAL_DVS1               (0x08<<WM831X_GPN_FN_SHIFT)
+
+#define WM831X_GPN_DIR_VAL                   (0x1<<WM831X_GPN_DIR_SHIFT)
+#define WM831X_GPN_PULL_VAL                  (0x3<<WM831X_GPN_PULL_SHIFT)
+#define WM831X_GPN_INT_MODE_VAL              (0x1<<WM831X_GPN_INT_MODE_SHIFT)
+#define WM831X_GPN_POL_VAL                   (0x1<<WM831X_GPN_POL_SHIFT)
+#define WM831X_GPN_ENA_VAL                   (0x1<<WM831X_GPN_ENA_SHIFT)
+
+#define WM831X_GPIO7_8_9_MASK               (WM831X_GPN_DIR_MASK|WM831X_GPN_INT_MODE_MASK|WM831X_GPN_PULL_MASK|WM831X_GPN_POL_MASK|WM831X_GPN_FN_MASK)
+
+
+#define WM831X_GPIO7_VAL                     (WM831X_GPN_DIR_VAL|WM831X_GPN_PULL_VAL|WM831X_GPN_INT_MODE_VAL|WM831X_GPN_POL_VAL|WM831X_GPN_ENA_VAL|WM831X_GPN_FN_VAL_HW_EN)
+#define WM831X_GPIO8_VAL                     (WM831X_GPN_DIR_VAL|WM831X_GPN_PULL_VAL|WM831X_GPN_INT_MODE_VAL|WM831X_GPN_POL_VAL|WM831X_GPN_ENA_VAL|WM831X_GPN_FN_VAL_HW_CTL)
+#define WM831X_GPIO9_VAL                     (WM831X_GPN_DIR_VAL|WM831X_GPN_PULL_VAL|WM831X_GPN_INT_MODE_VAL|WM831X_GPN_POL_VAL|WM831X_GPN_ENA_VAL|WM831X_GPN_FN_VAL_DVS1)
+
+#define WM831X_STATUS_LED_MASK                0xC000
+#define WM831X_STATUS_LED_ON                  (0x1 << 14)
+#define WM831X_STATUS_LED_OFF                 (0x0 << 14)
+
+static int wm8326_post_init(struct wm831x *wm831x)
+{
+	wm831x_set_bits(wm831x, WM831X_DC1_ON_CONFIG, WM831X_DC1_ON_VSEL_MASK, WM831X_DC1_ON_CONFIG_VAL);
+	wm831x_set_bits(wm831x, WM831X_DC2_ON_CONFIG, WM831X_DC2_ON_VSEL_MASK, WM831X_DC2_ON_CONFIG_VAL);
+	wm831x_set_bits(wm831x, WM831X_DC3_ON_CONFIG, WM831X_DC3_ON_VSEL_MASK, WM831X_DC3_ON_CONFIG_VAL);
+
+	wm831x_set_bits(wm831x, WM831X_DC1_DVS_CONTROL, WM831X_DC1_DVS_MASK, WM831X_DC1_DVS_VAL);
+	wm831x_set_bits(wm831x, WM831X_DC2_DVS_CONTROL, WM831X_DC2_DVS_MASK, WM831X_DC2_DVS_VAL);
+
+	wm831x_set_bits(wm831x, WM831X_GPIO7_CONTROL, WM831X_GPIO7_8_9_MASK, WM831X_GPIO7_VAL);
+	wm831x_set_bits(wm831x, WM831X_GPIO8_CONTROL, WM831X_GPIO7_8_9_MASK, WM831X_GPIO8_VAL);
+	wm831x_set_bits(wm831x, WM831X_GPIO9_CONTROL, WM831X_GPIO7_8_9_MASK, WM831X_GPIO9_VAL);
+
+    wm831x_set_bits(wm831x, WM831X_STATUS_LED_1 , WM831X_STATUS_LED_MASK, WM831X_STATUS_LED_OFF);
+    wm831x_set_bits(wm831x, WM831X_STATUS_LED_2 , WM831X_STATUS_LED_MASK, WM831X_STATUS_LED_ON);
+	return 0;
+}
+
+static struct wm831x_pdata hdmidongle_wm8326_pdata = {
+	.post_init = wm8326_post_init,
+};
+#endif
+
+static struct i2c_board_info mxc_i2c2_board_info[] __initdata = {
+	{
+#ifdef CONFIG_MFD_WM831X
+	I2C_BOARD_INFO("wm8326", 0x34),
+	.platform_data = &hdmidongle_wm8326_pdata,
+#endif
+	},
+};
+
+static struct spi_board_info wm8326_spi1_board_info[] __initdata = {
+#if defined(CONFIG_MFD_WM831X_SPI)
+	{
+	/* The modalias must be the same as spi device driver name */
+	.modalias	= "wm8326",
+	.max_speed_hz	= 20000000,
+	.bus_num	= 1,
+	.chip_select	= 0,
+	},
+#endif
+};
+
+static void spi_device_init(void)
+{
+	spi_register_board_info(wm8326_spi1_board_info,
+				ARRAY_SIZE(wm8326_spi1_board_info));
 }
 
 static struct imxi2c_platform_data mx6q_hdmidongle_i2c_data = {
@@ -321,18 +431,6 @@ static struct imx_ipuv3_platform_data ipu_data[] = {
 	},
 };
 
-static struct ion_platform_data imx_ion_data = {
-	.nr = 1,
-	.heaps = {
-		{
-		.id = 0,
-		.type = ION_HEAP_TYPE_CARVEOUT,
-		.name = "vpu_ion",
-		.size = SZ_64M,
-		},
-	},
-};
-
 static void hdmidongle_suspend_enter(void)
 {
 	/* suspend preparation */
@@ -436,8 +534,7 @@ static void __init imx6q_add_device_buttons(void) {}
 
 static struct mxc_dvfs_platform_data hdmidongle_dvfscore_data = {
 	#ifdef CONFIG_MX6_INTER_LDO_BYPASS
-	.reg_id = "VDDCORE_DCDC1",
-	.soc_id = "VDDSOC_DCDC2",
+	.reg_id = "VDDCORE",
 	#else
 	.reg_id = "cpu_vddgp",
 	.soc_id = "cpu_vddsoc",
@@ -535,6 +632,7 @@ static void __init mx6_hdmidongle_board_init(void)
 
 	gp_reg_id = hdmidongle_dvfscore_data.reg_id;
 	soc_reg_id = hdmidongle_dvfscore_data.soc_id;
+	pu_reg_id = hdmidongle_dvfscore_data.pu_id;
 	mx6q_hdmidongle_init_uart();
 
 	/*
@@ -567,7 +665,14 @@ static void __init mx6_hdmidongle_board_init(void)
 	i2c_register_board_info(1, mxc_i2c1_board_info,
 			ARRAY_SIZE(mxc_i2c1_board_info));
 
-	mx6q_hdmidongle_init_wm8326();
+
+	i2c_register_board_info(2, mxc_i2c2_board_info,
+			ARRAY_SIZE(mxc_i2c2_board_info));
+
+
+	/* SPI */
+	imx6q_add_ecspi(1, &mx6q_hdmidongle_spi_data);
+	spi_device_init();
 
 	imx6q_add_mxc_hdmi(&hdmi_data);
 
@@ -602,9 +707,6 @@ static void __init mx6_hdmidongle_board_init(void)
 	mx6_cpu_regulator_init();
 	#endif
 
-	imx6q_add_ion(0, &imx_ion_data,
-		sizeof(imx_ion_data) + sizeof(struct ion_platform_heap));
-
 	imx6q_add_device_buttons();
 
 	imx6q_add_hdmi_soc();
@@ -614,19 +716,19 @@ static void __init mx6_hdmidongle_board_init(void)
 		gpio_request(HDMIDONGLE_BT_RST, "bt_reset");
 		gpio_direction_output(HDMIDONGLE_BT_RST, 1);
 		gpio_set_value(HDMIDONGLE_BT_RST, 1);
-		mdelay(1000);
+		msleep(1000);
 		gpio_request(HDMIDONGLE_BT_EN, "bt_en");
 		gpio_direction_output(HDMIDONGLE_BT_EN, 1);
 		gpio_set_value(HDMIDONGLE_BT_EN, 1);
 
-		mdelay(1000);
+		msleep(1000);
 		gpio_request(HDMIDONGLE_WL_EN, "wl_en");
 		gpio_direction_output(HDMIDONGLE_WL_EN, 1);
 		gpio_set_value(HDMIDONGLE_WL_EN, 1);
-		mdelay(1000);
-#ifdef CONFIG_IMX_PCIE
+		msleep(1000);
 	} else if (board_is_mx6_revb() || board_is_mx6_revc()) {
 		/* Add PCIe RC interface support */
+#ifdef CONFIG_IMX_PCIE
 		imx6q_add_pcie(&mx6_hdmidongle_pcie_data);
 #endif
 	}

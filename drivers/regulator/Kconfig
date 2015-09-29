@@ -335,5 +335,13 @@ config REGULATOR_TPS65910
 	help
 	  This driver supports TPS65910 voltage regulator chips.
 
+config REGULATOR_RICOH619
+	tristate "Ricoh R5T619 Power regulators"
+	depends on MFD_RICOH619
+	default n
+	help
+	  This driver supports regulator driver for the Ricoh R5T619
+	  Power Management device.
+
 endif
 

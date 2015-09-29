@@ -129,6 +129,8 @@ static int csi_enc_setup(cam_data *cam)
 		return -EINVAL;
 	}
 
+	ipu_csi_enable_mclk_if(cam->ipu, CSI_MCLK_ENC, cam->csi, true, true);
+
 #ifdef CONFIG_MXC_MIPI_CSI2
 	mipi_csi2_info = mipi_csi2_get_info();
 
@@ -172,7 +174,7 @@ static int csi_enc_setup(cam_data *cam)
 				      pixel_fmt, cam->v2f.fmt.pix.width,
 				      cam->v2f.fmt.pix.height,
 				      cam->v2f.fmt.pix.bytesperline,
-				      cam->rotation,
+				      IPU_ROTATE_NONE,
 				      dummy, dummy, 0,
 				      cam->offset.u_offset,
 				      cam->offset.v_offset);
@@ -294,6 +296,8 @@ static int csi_enc_disabling_tasks(void *private)
 	int csi_id;
 #endif
 
+	ipu_free_irq(cam->ipu, IPU_IRQ_CSI0_OUT_EOF, cam);
+
 	err = ipu_disable_channel(cam->ipu, CSI_MEM, true);
 
 	ipu_uninit_channel(cam->ipu, CSI_MEM);
@@ -315,6 +319,8 @@ static int csi_enc_disabling_tasks(void *private)
 		return -EPERM;
 	}
 #endif
+
+	ipu_csi_enable_mclk_if(cam->ipu, CSI_MCLK_ENC, cam->csi, false, false);
 
 	return err;
 }
@@ -341,11 +347,6 @@ static int csi_enc_enable_csi(void *private)
 static int csi_enc_disable_csi(void *private)
 {
 	cam_data *cam = (cam_data *) private;
-
-	/* free csi eof irq firstly.
-	 * when disable csi, wait for idmac eof.
-	 * it requests eof irq again */
-	ipu_free_irq(cam->ipu, IPU_IRQ_CSI0_OUT_EOF, cam);
 
 	return ipu_disable_csi(cam->ipu, cam->csi);
 }

@@ -804,6 +804,18 @@ config MFD_MXC_HDMI
 	  This is the core driver for the i.Mx on-chip HDMI.  This MFD
 	  driver connects with the video and audio drivers for HDMI.
 
+config MFD_RICOH619
+	bool "Ricoh R5T619 Power Management system device"
+	depends on I2C && GPIOLIB && GENERIC_HARDIRQS
+	select MFD_CORE
+	default n
+	help
+	  If you say yes here you get support for the Ricoh R5T619
+	  Power Management system device.
+	  This driver provides common support for accessing the device,
+	  additional drivers must be enabled in order to use the
+	  functionality of the device.
+
 endif # MFD_SUPPORT
 
 menu "Multimedia Capabilities Port drivers"

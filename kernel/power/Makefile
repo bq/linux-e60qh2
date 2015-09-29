@@ -18,3 +18,6 @@ obj-$(CONFIG_CPUHOTPLUG_EARLYSUSPEND) 	+= cpuhotplug_earlysuspend.o
 obj-$(CONFIG_SUSPEND_TIME)	+= suspend_time.o
 
 obj-$(CONFIG_MAGIC_SYSRQ)	+= poweroff.o
+
+obj-$(CONFIG_CPU_FREQ) += cpufreq_governor_chg.o
+

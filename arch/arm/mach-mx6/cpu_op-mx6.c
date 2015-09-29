@@ -229,13 +229,13 @@ static struct cpu_op mx6sl_cpu_op_1G[] = {
 	 .pu_voltage = 1200000,
 	 .soc_voltage = 1200000,
 	 .cpu_voltage = 1250000,},
-	{
+/*	{
 	 .pll_rate = 792000000,
 	 .cpu_rate = 792000000,
 	 .cpu_podf = 0,
 	 .pu_voltage = 1150000,
 	 .soc_voltage = 1150000,
-	 .cpu_voltage = 1150000,},
+	 .cpu_voltage = 1150000,},*/
 	{
 	 .pll_rate = 396000000,
 	 .pll_lpm_rate = 792000000,

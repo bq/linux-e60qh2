@@ -3,7 +3,7 @@
  * Copyright 2008 Juergen Beisert, kernel@pengutronix.de
  *
  * Based on code from Freescale,
- * Copyright (C) 2004-2012 Freescale Semiconductor, Inc.
+ * Copyright (C) 2004-2013 Freescale Semiconductor, Inc.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -252,16 +252,15 @@ static void _set_gpio_direction(struct gpio_chip *chip, unsigned offset,
 {
 	struct mxc_gpio_port *port =
 		container_of(chip, struct mxc_gpio_port, chip);
-	u32 l;
 	unsigned long flags;
 
 	spin_lock_irqsave(&port->lock, flags);
-	l = __raw_readl(port->base + GPIO_GDIR);
+	port->dir = __raw_readl(port->base + GPIO_GDIR);
 	if (dir)
-		l |= 1 << offset;
+		port->dir |= (1 << offset);
 	else
-		l &= ~(1 << offset);
-	__raw_writel(l, port->base + GPIO_GDIR);
+		port->dir &= (~(1 << offset));
+	__raw_writel(port->dir, port->base + GPIO_GDIR);
 	spin_unlock_irqrestore(&port->lock, flags);
 }
 
@@ -283,8 +282,14 @@ static int mxc_gpio_get(struct gpio_chip *chip, unsigned offset)
 {
 	struct mxc_gpio_port *port =
 		container_of(chip, struct mxc_gpio_port, chip);
+	u32 gpio_direction;
 
-	return (__raw_readl(port->base + GPIO_PSR) >> offset) & 1;
+	gpio_direction = __raw_readl(port->base + GPIO_GDIR);
+	if (((gpio_direction >> offset) & 1)) /* output mode */
+		return (__raw_readl(port->base + GPIO_DR) >> offset) & 1;
+	else /* input mode */
+		return (__raw_readl(port->base + GPIO_PSR) >> offset) & 1;
+
 }
 
 static int mxc_gpio_direction_input(struct gpio_chip *chip, unsigned offset)
@@ -337,6 +342,7 @@ int mxc_gpio_init(struct mxc_gpio_port *port, int cnt)
 		port[i].chip.set = mxc_gpio_set;
 		port[i].chip.base = i * 32;
 		port[i].chip.ngpio = 32;
+		port[i].dir = 0;
 
 		spin_lock_init(&port[i].lock);
 

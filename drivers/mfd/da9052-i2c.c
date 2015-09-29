@@ -1,6 +1,5 @@
 /*
  * Copyright(c) 2009 Dialog Semiconductor Ltd.
- * Copyright (C) 2012 Freescale Semiconductor, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,21 +21,23 @@ static struct da9052 *da9052_i2c;
 
 static int da9052_i2c_is_connected(void)
 {
-	struct da9052_ssc_msg msg;
-	int retries = 10, ret = -1;
 
-	msg.addr = DA9052_INTERFACE_REG;
-	do {
-		/* Test i2c connectivity by reading the GPIO_0-1 register */
-		if (0 != da9052_i2c_read(da9052_i2c, &msg)) {
-			printk(KERN_INFO"da9052_i2c_is_connected - i2c read failed.....\n");
-		} else {
-			printk(KERN_INFO"da9052_i2c_is_connected - i2c read success....\n");
-			ret = 0;
-		}
-	} while (ret != 0 && retries--);
+        struct da9052_ssc_msg msg;
 
-	return ret;
+        //printk("Entered da9052_i2c_is_connected.............\n");
+
+        msg.addr = DA9052_INTERFACE_REG;
+
+        /* Test spi connectivity by performing read of the GPIO_0-1 register */
+        if ( 0 != da9052_i2c_read(da9052_i2c, &msg)) {
+                printk("da9052_i2c_is_connected - i2c read failed.............\n");
+                return -1;
+        }
+        else {
+               printk("da9052_i2c_is_connected - i2c read success..............\n");
+                return 0;
+        }
+
 }
 
 static int __devinit da9052_i2c_probe(struct i2c_client *client,

@@ -84,6 +84,7 @@
 #define I2CR_IIEN	0x40
 #define I2CR_IEN	0x80
 
+
 /** Variables ******************************************************************
 *******************************************************************************/
 
@@ -126,6 +127,9 @@ struct imx_i2c_struct {
 	unsigned int		cur_clk;
 };
 
+static void i2c_imx_stop(struct imx_i2c_struct *i2c_imx);
+
+extern int ntx_i2c_recovery(int iI2C_Chn_Idx);
 /** Functions for IMX I2C adapter driver ***************************************
 *******************************************************************************/
 
@@ -152,7 +156,13 @@ static int i2c_imx_bus_busy(struct imx_i2c_struct *i2c_imx, int for_busy)
 				"<%s> I2C bus is busy\n", __func__);
 			return -ETIMEDOUT;
 		}
-		schedule();
+
+		if(in_atomic() || in_interrupt() ) {
+			udelay(100);
+		}
+		else {
+			schedule();
+		}
 	}
 
 	return 0;
@@ -160,12 +170,46 @@ static int i2c_imx_bus_busy(struct imx_i2c_struct *i2c_imx, int for_busy)
 
 static int i2c_imx_trx_complete(struct imx_i2c_struct *i2c_imx)
 {
-	wait_event_timeout(i2c_imx->queue, i2c_imx->i2csr & I2SR_IIF, HZ / 10);
+	int iRecoveryRetryCnt=0;
 
-	if (unlikely(!(i2c_imx->i2csr & I2SR_IIF))) {
-		dev_dbg(&i2c_imx->adapter.dev, "<%s> Timeout\n", __func__);
-		return -ETIMEDOUT;
-	}
+	do {
+		if(in_atomic() || in_interrupt()) {
+			unsigned long dwRetryMaxCnt=1000;
+			unsigned long dwRetryCnt=0;
+
+			do {
+				i2c_imx->i2csr |= readb(i2c_imx->base + IMX_I2C_I2SR);
+				if(i2c_imx->i2csr & I2SR_IIF) {
+					break;
+				}
+
+				if(dwRetryCnt++>dwRetryMaxCnt) {
+					printk(KERN_ERR"%s retry over %lu times !!\n",__FUNCTION__,dwRetryMaxCnt);
+					break;
+				}
+				udelay(100);
+			}while(1) ;
+			
+		}
+		else {
+			wait_event_timeout(i2c_imx->queue, i2c_imx->i2csr & I2SR_IIF, HZ / 10);
+		}
+
+
+		if (unlikely(!(i2c_imx->i2csr & I2SR_IIF))) {
+			++iRecoveryRetryCnt;
+			dev_err(&i2c_imx->adapter.dev, "<%s> i2c%d Timeout,recovery%d\n", __func__,i2c_imx->adapter.nr,iRecoveryRetryCnt);
+			if(iRecoveryRetryCnt<=5) {
+				if(ntx_i2c_recovery(i2c_imx->adapter.nr)>=0) {
+					continue;
+				}
+			}
+			return -ETIMEDOUT;
+		}
+
+		break;
+	}while(1);
+
 	dev_dbg(&i2c_imx->adapter.dev, "<%s> TRX complete\n", __func__);
 	i2c_imx->i2csr = 0;
 	return 0;
@@ -175,6 +219,7 @@ static int i2c_imx_acked(struct imx_i2c_struct *i2c_imx)
 {
 	if (readb(i2c_imx->base + IMX_I2C_I2SR) & I2SR_RXAK) {
 		dev_dbg(&i2c_imx->adapter.dev, "<%s> No ACK\n", __func__);
+		//ntx_i2c_recovery(i2c_imx->adapter.nr);
 		return -EIO;  /* No ACK */
 	}
 
@@ -182,6 +227,7 @@ static int i2c_imx_acked(struct imx_i2c_struct *i2c_imx)
 	return 0;
 }
 
+extern int _ntx_get_wifi_power_status(void);
 static void i2c_imx_set_clk(struct imx_i2c_struct *i2c_imx,
 							unsigned int rate)
 {
@@ -189,12 +235,16 @@ static void i2c_imx_set_clk(struct imx_i2c_struct *i2c_imx,
 	unsigned int div;
 	int i;
 
+	if (400000==rate && _ntx_get_wifi_power_status()) {
+		rate = 100000;
+	}
+
 	/* Divider value calculation */
 	i2c_clk_rate = clk_get_rate(i2c_imx->clk);
-	if (i2c_imx->cur_clk == i2c_clk_rate)
+	if (i2c_imx->cur_clk == rate)
 		return;
 	else
-		i2c_imx->cur_clk = i2c_clk_rate;
+		i2c_imx->cur_clk = rate;
 	div = (i2c_clk_rate + rate - 1) / rate;
 	if (div < i2c_clk_div[0][0])
 		i = 0;
@@ -258,8 +308,10 @@ static int i2c_imx_start(struct imx_i2c_struct *i2c_imx)
 	temp |= I2CR_MSTA;
 	writeb(temp, i2c_imx->base + IMX_I2C_I2CR);
 	result = i2c_imx_bus_busy(i2c_imx, 1);
-	if (result)
+	if (result) {
+		ntx_i2c_recovery(i2c_imx->adapter.nr);
 		return result;
+	}
 	i2c_imx->stopped = 0;
 
 	temp |= I2CR_IIEN | I2CR_MTX | I2CR_TXAK;
@@ -287,7 +339,9 @@ static void i2c_imx_stop(struct imx_i2c_struct *i2c_imx)
 	}
 
 	if (!i2c_imx->stopped) {
-		i2c_imx_bus_busy(i2c_imx, 0);
+		if(i2c_imx_bus_busy(i2c_imx, 0)) {
+			ntx_i2c_recovery(i2c_imx->adapter.nr);
+		}
 		i2c_imx->stopped = 1;
 	}
 
@@ -324,11 +378,17 @@ static int i2c_imx_write(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs)
 	/* write slave address */
 	writeb(msgs->addr << 1, i2c_imx->base + IMX_I2C_I2DR);
 	result = i2c_imx_trx_complete(i2c_imx);
-	if (result)
+	if (result) {
+		dev_err(&i2c_imx->adapter.dev, "<%s> write addr[0x%02x] failed!!\n",
+				__func__,msgs->addr);
 		return result;
+	}
 	result = i2c_imx_acked(i2c_imx);
-	if (result)
+	if (result) {
+		dev_err(&i2c_imx->adapter.dev, "<%s> addr[0x%02x] No ACK !!\n",
+				__func__,msgs->addr);
 		return result;
+	}
 	dev_dbg(&i2c_imx->adapter.dev, "<%s> write data\n", __func__);
 
 	/* write data */
@@ -337,12 +397,20 @@ static int i2c_imx_write(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs)
 			"<%s> write byte: B%d=0x%X\n",
 			__func__, i, msgs->buf[i]);
 		writeb(msgs->buf[i], i2c_imx->base + IMX_I2C_I2DR);
+
 		result = i2c_imx_trx_complete(i2c_imx);
-		if (result)
+		if (result) {
+			dev_err(&i2c_imx->adapter.dev, "<%s> write data(%d/%d)[0x%02x] to dev[0x%02x] failed !!\n",
+				__func__,i,msgs->len,msgs->buf[i],msgs->addr);
 			return result;
+		}
+
 		result = i2c_imx_acked(i2c_imx);
-		if (result)
+		if (result) {
+			dev_dbg(&i2c_imx->adapter.dev, "<%s> write data(%d/%d)[0x%02x] to dev[0x%02x] No ACK !!\n",
+				__func__,i,msgs->len,msgs->buf[i],msgs->addr);
 			return result;
+		}
 	}
 	return 0;
 }
@@ -359,11 +427,17 @@ static int i2c_imx_read(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs)
 	/* write slave address */
 	writeb((msgs->addr << 1) | 0x01, i2c_imx->base + IMX_I2C_I2DR);
 	result = i2c_imx_trx_complete(i2c_imx);
-	if (result)
+	if (result) {
+		dev_err(&i2c_imx->adapter.dev, "<%s> write addr[0x%02x] failed!!\n",
+				__func__,msgs->addr);
 		return result;
+	}
 	result = i2c_imx_acked(i2c_imx);
-	if (result)
+	if (result) {
+		dev_err(&i2c_imx->adapter.dev, "<%s> addr[0x%02x] No ACK !!\n",
+				__func__,msgs->addr);
 		return result;
+	}
 
 	dev_dbg(&i2c_imx->adapter.dev, "<%s> setup bus\n", __func__);
 
@@ -379,9 +453,14 @@ static int i2c_imx_read(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs)
 
 	/* read data */
 	for (i = 0; i < msgs->len; i++) {
+
 		result = i2c_imx_trx_complete(i2c_imx);
-		if (result)
+		if (result) {
+			dev_err(&i2c_imx->adapter.dev, "<%s> read data(%d/%d) from dev[0x%02x] failed !!\n",
+				__func__,i,msgs->len,msgs->addr);
 			return result;
+		}
+
 		if (i == (msgs->len - 1)) {
 			/* It must generate STOP before read I2DR to prevent
 			   controller from generating another clock cycle */
@@ -418,8 +497,11 @@ static int i2c_imx_xfer(struct i2c_adapter *adapter,
 
 	/* Start I2C transfer */
 	result = i2c_imx_start(i2c_imx);
-	if (result)
+	if (result) {
+		dev_err(&i2c_imx->adapter.dev, "<%s> dev[0x%02x] start failed!!\n",
+				__func__,msgs->addr);
 		goto fail0;
+	}
 
 	/* read/write data */
 	for (i = 0; i < num; i++) {
@@ -430,8 +512,11 @@ static int i2c_imx_xfer(struct i2c_adapter *adapter,
 			temp |= I2CR_RSTA;
 			writeb(temp, i2c_imx->base + IMX_I2C_I2CR);
 			result =  i2c_imx_bus_busy(i2c_imx, 1);
-			if (result)
+			if (result) {
+				dev_err(&i2c_imx->adapter.dev, "<%s> dev[0x%02x] restart failed!!\n",
+					__func__,msgs->addr);
 				goto fail0;
+			}
 		}
 		dev_dbg(&i2c_imx->adapter.dev,
 			"<%s> transfer message: %d\n", __func__, i);

@@ -88,9 +88,12 @@ void mx6_cpu_regulator_init(void)
 	printk(KERN_INFO "cpu regulator mode:%s\n", (enable_ldo_mode ==
 		LDO_MODE_BYPASSED) ? "ldo_bypass" : "ldo_enable");
 	cpu_regulator = regulator_get(NULL, gp_reg_id);
+#if 0
 	if (IS_ERR(cpu_regulator))
 		printk(KERN_ERR "%s: failed to get cpu regulator\n", __func__);
-	else {
+	else 
+#endif
+	{
 		cpu_clk = clk_get(NULL, "cpu_clk");
 		if (IS_ERR(cpu_clk)) {
 			printk(KERN_ERR "%s: failed to get cpu clock\n",
@@ -118,10 +121,12 @@ void mx6_cpu_regulator_init(void)
 				regulator_set_voltage(pu_regulator,
 					      cpu_op_tbl[0].pu_voltage,
 					      cpu_op_tbl[0].pu_voltage);
-			/* set the core to higheset setpoint voltage. */
-			regulator_set_voltage(cpu_regulator,
+			if (!IS_ERR(cpu_regulator)) {
+				/* set the core to higheset setpoint voltage. */
+				regulator_set_voltage(cpu_regulator,
 					      cpu_op_tbl[0].cpu_voltage,
 					      cpu_op_tbl[0].cpu_voltage);
+			}
 			if (enable_ldo_mode == LDO_MODE_BYPASSED) {
 				/* digital bypass VDDPU/VDDSOC/VDDARM */
 				reg = __raw_readl(ANADIG_REG_CORE);

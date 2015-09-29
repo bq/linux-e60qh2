@@ -43,9 +43,6 @@ static struct cpufreq_frequency_table *imx_freq_table;
 static int cpu_op_nr;
 static struct cpu_op *cpu_op_tbl;
 static u32 pre_suspend_rate;
-#ifdef CONFIG_ARCH_MX5
-int cpufreq_suspended;
-#endif
 static bool cpufreq_suspend;
 static struct mutex set_cpufreq_lock;
 
@@ -109,12 +106,16 @@ int set_cpu_freq(int freq)
 				goto err2;
 			}
 		}
+		if (!IS_ERR(cpu_regulator)) 
+		{
 		ret = regulator_set_voltage(cpu_regulator, gp_volt,
 					    gp_volt);
 		if (ret < 0) {
 			printk(KERN_ERR "COULD NOT SET GP VOLTAGE!!!!\n");
 			goto err3;
 		}
+		}
+		udelay(50);
 	}
 	ret = clk_set_rate(cpu_clk, freq);
 	if (ret != 0) {
@@ -123,11 +124,13 @@ int set_cpu_freq(int freq)
 	}
 
 	if (freq < org_cpu_rate) {
+		if (!IS_ERR(cpu_regulator)) {
 		ret = regulator_set_voltage(cpu_regulator, gp_volt,
 					    gp_volt);
 		if (ret < 0) {
 			printk(KERN_ERR "COULD NOT SET GP VOLTAGE!!!!\n");
 			goto err5;
+		}
 		}
 		if (!IS_ERR(soc_regulator)) {
 			ret = regulator_set_voltage(soc_regulator, soc_volt,
@@ -150,7 +153,8 @@ int set_cpu_freq(int freq)
 			}
 		}
 		/* Check if the bus freq can be decreased.*/
-		bus_freq_update(cpu_clk, false);
+		if (freq == cpu_op_tbl[cpu_op_nr - 1].cpu_rate)
+			bus_freq_update(cpu_clk, false);
 	}
 
 	return ret;
@@ -234,12 +238,7 @@ static int mxc_set_target(struct cpufreq_policy *policy,
 	num_cpus = num_possible_cpus();
 	if (policy->cpu > num_cpus)
 		return 0;
-
-	if (dvfs_core_is_active
-#ifdef CONFIG_ARCH_MX5
-		|| cpufreq_suspended
-#endif
-		) {
+	if (dvfs_core_is_active) {
 		struct cpufreq_freqs freqs;
 
 		freqs.old = policy->cur;
@@ -514,14 +513,10 @@ Notify_finish:
 static struct notifier_block imx_cpufreq_pm_notifier = {
 	.notifier_call = cpufreq_pm_notify,
 };
-#ifdef CONFIG_ARCH_MX6
 extern void mx6_cpu_regulator_init(void);
-#endif
 static int __init mxc_cpufreq_driver_init(void)
 {
-#ifdef CONFIG_ARCH_MX6
 	mx6_cpu_regulator_init();
-#endif
 	mutex_init(&set_cpufreq_lock);
 	register_pm_notifier(&imx_cpufreq_pm_notifier);
 	return cpufreq_register_driver(&mxc_driver);

@@ -161,6 +161,8 @@ static int csi_enc_setup(cam_data *cam)
 		return -EINVAL;
 	}
 
+	ipu_csi_enable_mclk_if(cam->ipu, CSI_MCLK_ENC, cam->csi, true, true);
+
 #ifdef CONFIG_MXC_MIPI_CSI2
 	mipi_csi2_info = mipi_csi2_get_info();
 
@@ -390,6 +392,8 @@ static int bg_overlay_stop(void *private)
 	if (cam->overlay_active == false)
 		return 0;
 
+	ipu_free_irq(cam->ipu, IPU_IRQ_CSI0_OUT_EOF, cam);
+
 	err = ipu_disable_channel(cam->ipu, CSI_MEM, true);
 
 	ipu_uninit_channel(cam->ipu, CSI_MEM);
@@ -416,6 +420,7 @@ static int bg_overlay_stop(void *private)
 
 	flush_work_sync(&cam->csi_work_struct);
 	cancel_work_sync(&cam->csi_work_struct);
+	ipu_csi_enable_mclk_if(cam->ipu, CSI_MCLK_VF, cam->csi, false, false);
 
 	if (cam->vf_bufs_vaddr[0]) {
 		dma_free_coherent(0, cam->vf_bufs_size[0],
@@ -470,11 +475,6 @@ static int bg_overlay_enable_csi(void *private)
 static int bg_overlay_disable_csi(void *private)
 {
 	cam_data *cam = (cam_data *) private;
-
-	/* free csi eof irq firstly.
-	 * when disable csi, wait for idmac eof.
-	 * it requests eof irq again */
-	ipu_free_irq(cam->ipu, IPU_IRQ_CSI0_OUT_EOF, cam);
 
 	return ipu_disable_csi(cam->ipu, cam->csi);
 }

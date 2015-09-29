@@ -119,7 +119,6 @@ void hdmi_dma_copy_24_neon_fast(unsigned int *src, unsigned int *dst,
 			int samples);
 
 hdmi_audio_header_t iec_header;
-EXPORT_SYMBOL(iec_header);
 
 /*
  * Note that the period size for DMA != period size for ALSA because the
@@ -578,7 +577,6 @@ static void hdmi_dma_mmap_copy(struct snd_pcm_substream *substream,
 	}
 }
 
-#ifdef CONFIG_ARCH_MX6
 static void hdmi_sdma_isr(void *data)
 {
 	struct imx_hdmi_dma_runtime_data *rtd = data;
@@ -612,7 +610,7 @@ static void hdmi_sdma_isr(void *data)
 
 	return;
 }
-#endif
+
 
 static irqreturn_t hdmi_dma_isr(int irq, void *dev_id)
 {
@@ -877,7 +875,6 @@ static int hdmi_dma_copy(struct snd_pcm_substream *substream, int channel,
 	return 0;
 }
 
-#ifdef CONFIG_ARCH_MX6
 static bool hdmi_filter(struct dma_chan *chan, void *param)
 {
 
@@ -973,7 +970,8 @@ static int hdmi_sdma_config(struct imx_hdmi_dma_runtime_data *params)
 
 	return 0;
 }
-#endif
+
+
 
 static int hdmi_dma_hw_free(struct snd_pcm_substream *substream)
 {
@@ -991,9 +989,7 @@ static int hdmi_dma_hw_params(struct snd_pcm_substream *substream,
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct imx_hdmi_dma_runtime_data *rtd = runtime->private_data;
-#ifdef CONFIG_ARCH_MX6
 	int err;
-#endif
 
 	rtd->buffer_bytes = params_buffer_bytes(params);
 	rtd->periods = params_periods(params);
@@ -1024,7 +1020,6 @@ static int hdmi_dma_hw_params(struct snd_pcm_substream *substream,
 	}
 
 	rtd->dma_period_bytes = rtd->period_bytes * rtd->buffer_ratio;
-#ifdef CONFIG_ARCH_MX6
 	if (hdmi_SDMA_check()) {
 		rtd->sdma_params.buffer_num = rtd->periods;
 		rtd->sdma_params.phyaddr = rtd->phy_hdmi_sdma_t;
@@ -1042,7 +1037,6 @@ static int hdmi_dma_hw_params(struct snd_pcm_substream *substream,
 		if (err)
 			return err;
 	}
-#endif
 
 	snd_pcm_set_runtime_buffer(substream, &substream->dma_buffer);
 
@@ -1072,6 +1066,8 @@ static int hdmi_dma_trigger(struct snd_pcm_substream *substream, int cmd)
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_RESUME:
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
+		if (!check_hdmi_state())
+			return 0;
 		rtd->frame_idx = 0;
 		if (runtime->access == SNDRV_PCM_ACCESS_MMAP_INTERLEAVED) {
 			appl_bytes = frames_to_bytes(runtime,

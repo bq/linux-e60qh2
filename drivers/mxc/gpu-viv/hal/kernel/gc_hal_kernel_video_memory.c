@@ -1,6 +1,6 @@
 /****************************************************************************
 *
-*    Copyright (C) 2005 - 2013 by Vivante Corp.
+*    Copyright (C) 2005 - 2012 by Vivante Corp.
 *
 *    This program is free software; you can redistribute it and/or modify
 *    it under the terms of the GNU General Public License as published by
@@ -17,6 +17,8 @@
 *    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 *
 *****************************************************************************/
+
+
 
 
 #include "gc_hal_kernel_precomp.h"
@@ -1027,8 +1029,7 @@ gckVIDMEM_AllocateLinear(
     )
     {
         /* The left memory is for small memory.*/
-        status = gcvSTATUS_OUT_OF_MEMORY;
-        goto OnError;
+        gcmkONERROR(gcvSTATUS_OUT_OF_MEMORY);
     }
 #endif
 

@@ -56,7 +56,7 @@ static inline void esdhc_set_clock(struct sdhci_host *host, unsigned int clock)
 	struct platform_device *pdev = to_platform_device(host->mmc->parent);
 
 	boarddata = host->mmc->parent->platform_data;
-	if (cpu_is_mx6q() || cpu_is_mx6dl()) {
+	if (cpu_is_mx6q() || cpu_is_mx6dl() || cpu_is_mx6sl()) {
 		pre_div = 1;
 		if (readl(host->ioaddr + SDHCI_MIX_CTRL) &
 				SDHCI_MIX_CTRL_DDREN) {

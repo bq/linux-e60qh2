@@ -3100,6 +3100,12 @@ struct fsg_module_parameters {
 	unsigned int	nofua_count;
 	unsigned int	luns;	/* nluns */
 	int		stall;	/* can_stall */
+
+	unsigned short vendor,product ;
+	char *vendor_id,*product_id ;
+	char *desp_m,*desp_p ;
+	char *SN ;
+	char *manufacturer ;
 };
 
 #define _FSG_MODULE_PARAM_ARRAY(prefix, params, name, type, desc)	\
@@ -3127,7 +3133,24 @@ struct fsg_module_parameters {
 	_FSG_MODULE_PARAM(prefix, params, luns, uint,			\
 			  "number of LUNs");				\
 	_FSG_MODULE_PARAM(prefix, params, stall, bool,			\
-			  "false to prevent bulk stalls")
+			  "false to prevent bulk stalls");		\
+	_FSG_MODULE_PARAM(prefix, params,vendor , ushort,               \
+				"USB Vendor ID");       \
+	_FSG_MODULE_PARAM(prefix, params,product , ushort,              \
+				"USB Product ID");      \
+	_FSG_MODULE_PARAM(prefix, params,vendor_id , charp,             \
+				"USB Vendor ID string");        \
+	_FSG_MODULE_PARAM(prefix, params,product_id , charp,            \
+			"USB Product ID string");       \
+	_FSG_MODULE_PARAM(prefix, params,desp_m , charp,                \
+			"USB descriptor M string");     \
+	_FSG_MODULE_PARAM(prefix, params,desp_p , charp,                \
+			"USB descriptor P string");     \
+	_FSG_MODULE_PARAM(prefix, params,manufacturer , charp,                \
+			"manufacturer");     \
+	_FSG_MODULE_PARAM(prefix, params,SN , charp,            \
+			"Serial NO. string")
+
 
 static void
 fsg_config_from_params(struct fsg_config *cfg,

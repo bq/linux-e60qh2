@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2012 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright (C) 2011 Freescale Semiconductor, Inc. All Rights Reserved.
  */
 
 /*
@@ -26,7 +26,6 @@
 #include <mach/common.h>
 #include <mach/hardware.h>
 #include <mach/clock.h>
-#include <mach/devices-common.h>
 #include <asm/proc-fns.h>
 #include <asm/system.h>
 #include "crm_regs.h"
@@ -48,53 +47,34 @@ extern int dvfs_core_is_active;
 extern void __iomem *ccm_base;
 extern void __iomem *databahn_base;
 extern int low_bus_freq_mode;
-extern void (*wait_in_iram)(void *ccm_addr, void *databahn_addr,
-							u32 sys_clk_count);
+extern void (*wait_in_iram)(void *ccm_addr, void *databahn_addr);
 extern void mx50_wait(u32 ccm_base, u32 databahn_addr);
 extern void stop_dvfs(void);
 extern void *wait_in_iram_base;
 extern void __iomem *apll_base;
-extern void __iomem *arm_plat_base;
-extern void (*suspend_in_iram)(void *param1, void *param2, void* param3);
-extern void __iomem *suspend_param1;
-
-#ifdef CONFIG_MXC_REBOOT_ANDROID_CMD
-#ifdef CONFIG_SOC_IMX50
-static resource_size_t srtc_iobase = MX50_SRTC_BASE_ADDR;
-#endif
-#ifdef CONFIG_SOC_IMX51
-static resource_size_t srtc_iobase = MX51_SRTC_BASE_ADDR;
-#endif
-#ifdef CONFIG_SOC_IMX53
-static resource_size_t srtc_iobase = MX53_SRTC_BASE_ADDR;
-#endif
-#endif
 
 static struct clk *gpc_dvfs_clk;
+static struct regulator *vpll;
 static struct clk *pll1_sw_clk;
 static struct clk *osc;
 static struct clk *pll1_main_clk;
 static struct clk *ddr_clk ;
-static struct clk *sys_clk ;
+static int dvfs_core_paused;
 
 /* set cpu low power mode before WFI instruction */
 void mxc_cpu_lp_set(enum mxc_cpu_pwr_mode mode)
 {
 	u32 plat_lpc, arm_srpgcr, ccm_clpcr;
-	u32 empgc0 = 0, empgc1 = 0;
+	u32 empgc0, empgc1;
 	int stop_mode = 0;
 
 	/* always allow platform to issue a deep sleep mode request */
-	plat_lpc = __raw_readl(arm_plat_base + MXC_CORTEXA8_PLAT_LPC) &
+	plat_lpc = __raw_readl(MXC_CORTEXA8_PLAT_LPC) &
 	    ~(MXC_CORTEXA8_PLAT_LPC_DSM);
 	ccm_clpcr = __raw_readl(MXC_CCM_CLPCR) & ~(MXC_CCM_CLPCR_LPM_MASK);
 	arm_srpgcr = __raw_readl(MXC_SRPG_ARM_SRPGCR) & ~(MXC_SRPGCR_PCR);
-	if (!cpu_is_mx53()) {
-		empgc0 = __raw_readl(MXC_SRPG_EMPGC0_SRPGCR) &
-							~(MXC_SRPGCR_PCR);
-		empgc1 = __raw_readl(MXC_SRPG_EMPGC1_SRPGCR) &
-							~(MXC_SRPGCR_PCR);
-	}
+	empgc0 = __raw_readl(MXC_SRPG_EMPGC0_SRPGCR) & ~(MXC_SRPGCR_PCR);
+	empgc1 = __raw_readl(MXC_SRPG_EMPGC1_SRPGCR) & ~(MXC_SRPGCR_PCR);
 
 	switch (mode) {
 	case WAIT_CLOCKED:
@@ -123,7 +103,7 @@ void mxc_cpu_lp_set(enum mxc_cpu_pwr_mode mode)
 		if (tzic_enable_wake(1) != 0)
 			return;
 		break;
-	case STOP_XTAL_ON:
+	case STOP_POWER_ON:
 		ccm_clpcr |= 0x2 << MXC_CCM_CLPCR_LPM_OFFSET;
 		break;
 	default:
@@ -131,7 +111,7 @@ void mxc_cpu_lp_set(enum mxc_cpu_pwr_mode mode)
 		return;
 	}
 
-	__raw_writel(plat_lpc, arm_plat_base + MXC_CORTEXA8_PLAT_LPC);
+	__raw_writel(plat_lpc, MXC_CORTEXA8_PLAT_LPC);
 	__raw_writel(ccm_clpcr, MXC_CCM_CLPCR);
 	__raw_writel(arm_srpgcr, MXC_SRPG_ARM_SRPGCR);
 
@@ -139,7 +119,7 @@ void mxc_cpu_lp_set(enum mxc_cpu_pwr_mode mode)
 	if (mx50_revision() != IMX_CHIP_REVISION_1_0)
 		__raw_writel(arm_srpgcr, MXC_SRPG_NEON_SRPGCR);
 
-	if (stop_mode && !cpu_is_mx53()) {
+	if (stop_mode) {
 		empgc0 |= MXC_SRPGCR_PCR;
 		empgc1 |= MXC_SRPGCR_PCR;
 
@@ -169,9 +149,6 @@ void arch_idle(void)
 		mxc_cpu_lp_set(arch_idle_mode);
 
 		if (cpu_is_mx50() && (clk_get_usecount(ddr_clk) == 0)) {
-			if (sys_clk == NULL)
-				sys_clk = clk_get(NULL, "sys_clk");
-
 			memcpy(wait_in_iram_base, mx50_wait, SZ_4K);
 			wait_in_iram = (void *)wait_in_iram_base;
 			if (low_bus_freq_mode) {
@@ -201,8 +178,7 @@ void arch_idle(void)
 				cpu_podf = __raw_readl(MXC_CCM_CACRR);
 				__raw_writel(0x01, MXC_CCM_CACRR);
 
-				wait_in_iram(ccm_base, databahn_base,
-					clk_get_usecount(sys_clk));
+				wait_in_iram(ccm_base, databahn_base);
 
 				/* Set the ARM-POD divider back
 				 * to the original.
@@ -210,11 +186,7 @@ void arch_idle(void)
 				__raw_writel(cpu_podf, MXC_CCM_CACRR);
 				clk_set_parent(pll1_sw_clk, pll1_main_clk);
 			} else
-				wait_in_iram(ccm_base, databahn_base,
-					clk_get_usecount(sys_clk));
-		} else if (cpu_is_mx53() && (clk_get_usecount(ddr_clk) == 0)
-				&& low_bus_freq_mode) {
-			suspend_in_iram(suspend_param1, NULL, NULL);
+				wait_in_iram(ccm_base, databahn_base);
 		} else
 			cpu_do_idle();
 		clk_disable(gpc_dvfs_clk);
@@ -300,7 +272,7 @@ static int __mxs_reset_block(void __iomem *hwreg, int just_enable)
 int mxs_reset_block(void __iomem *hwreg, int just_enable)
 {
 	int try = 10;
-	int r = 0;
+	int r;
 
 	while (try--) {
 		r = __mxs_reset_block(hwreg, just_enable);
@@ -310,60 +282,3 @@ int mxs_reset_block(void __iomem *hwreg, int just_enable)
 	}
 	return r;
 }
-
-#ifdef CONFIG_MXC_REBOOT_ANDROID_CMD
-/* This function will set a bits on SRTC_LPGR[27-26] bits to enter
- * special boot mode.  These bits will not clear by watchdog reset, so
- * it can be checked by bootloader to choose enter different mode.
- * Bit 27 = Recovery mode
- * Bit 26 = Fastboot mode
- */
-
-#define ANDROID_RECOVERY_BOOT  (1 << 27)
-#define ANDROID_FASTBOOT_BOOT  (1 << 26)
-#define SRTC_LPGR               0x1C
-
-void do_switch_recovery(void)
-{
-	u32 reg;
-	void __iomem *srtc_base;
-	struct clk *srtc_clk;
-
-	srtc_clk = clk_get_sys("mxc_rtc.0", NULL);
-	if (IS_ERR_OR_NULL(srtc_clk))
-		printk(KERN_WARNING "Error getting mxc_rtc clk\n");
-	else
-		clk_enable(srtc_clk);
-
-	srtc_base = ioremap(srtc_iobase, 40);
-	if (srtc_base) {
-		reg = __raw_readl(srtc_base + SRTC_LPGR);
-		reg |= ANDROID_RECOVERY_BOOT;
-		__raw_writel(reg, srtc_base + SRTC_LPGR);
-		iounmap(srtc_base);
-	} else
-		printk(KERN_WARNING "Failed to ioremap srtc iobase\n");
-}
-
-void do_switch_fastboot(void)
-{
-	u32 reg;
-	void __iomem *srtc_base;
-	struct clk *srtc_clk;
-
-	srtc_clk = clk_get_sys("mxc_rtc.0", NULL);
-	if (IS_ERR_OR_NULL(srtc_clk))
-		printk(KERN_WARNING "Error getting mxc_rtc clk\n");
-	else
-		clk_enable(srtc_clk);
-
-	srtc_base = ioremap(srtc_iobase, 40);
-	if (srtc_base) {
-		reg = __raw_readl(srtc_base + SRTC_LPGR);
-		reg |= ANDROID_FASTBOOT_BOOT;
-		__raw_writel(reg, srtc_base + SRTC_LPGR);
-		iounmap(srtc_base);
-	} else
-		printk(KERN_WARNING "Failed to ioremap srtc iobase\n");
-}
-#endif

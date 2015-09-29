@@ -71,7 +71,6 @@
 #define IMX_BOARD_REV_2		0x100
 #define IMX_BOARD_REV_3		0x200
 #define IMX_BOARD_REV_4		0x300
-#define IMX_BOARD_REV_5		0x400
 
 #ifndef __ASSEMBLY__
 extern unsigned int system_rev;
@@ -86,7 +85,6 @@ extern unsigned int system_rev;
 #define board_is_mx53_arm2() (cpu_is_mx53() && board_is_rev(IMX_BOARD_REV_2))
 #define board_is_mx53_evk_a()    (cpu_is_mx53() && board_is_rev(IMX_BOARD_REV_1))
 #define board_is_mx53_evk_b()    (cpu_is_mx53() && board_is_rev(IMX_BOARD_REV_3))
-#define fuse_dev_is_available(int)  (1)
 #endif
 
 #ifdef CONFIG_SOC_IMX6Q
@@ -244,8 +242,6 @@ extern unsigned int __mxc_cpu_type;
 # define cpu_is_mx6q()		(0)
 # define cpu_is_mx6dl()		(0)
 # define cpu_is_mx6sl()		(0)
-# define mx6q_revision(void)	(0)
-# define mx6dl_revision(void)	(0)
 #endif
 
 #ifndef __ASSEMBLY__
@@ -299,9 +295,7 @@ enum mxc_dev_type {
 	MXC_DEV_RV,
 	MXC_DEV_SORENSEN,
 };
-#ifdef CONFIG_ARCH_MX6
 extern int fuse_dev_is_available(enum mxc_dev_type dev);
-#endif
 
 #endif
 

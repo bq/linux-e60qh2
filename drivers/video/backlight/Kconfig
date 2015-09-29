@@ -333,6 +333,16 @@ config BACKLIGHT_DA9052
 	help
 	  Enable the DA9052 Backlight Driver
 
+config BACKLIGHT_MXC_MSP430
+	tristate "MSP430 Frontlight Driver"
+	default y
+
+config BACKLIGHT_LM3630A
+	tristate "Backlight Driver for LM3630A"
+	depends on I2C
+	help
+	  This supports TI LM3630A Backlight Driver
+
 endif # BACKLIGHT_CLASS_DEVICE
 
 endif # BACKLIGHT_LCD_SUPPORT

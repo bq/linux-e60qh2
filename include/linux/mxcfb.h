@@ -23,6 +23,11 @@
 
 #include <linux/fb.h>
 
+#if defined(CONFIG_ANDROID) || defined(ANDROID) //[
+#else //][ !CONFIG_ANDROID||!ANDROID
+	#define MX50_IOCTL_IF	1
+#endif //] !CONFIG_ANDROID
+
 #define FB_SYNC_OE_LOW_ACT	0x80000000
 #define FB_SYNC_CLK_LAT_FALL	0x40000000
 #define FB_SYNC_DATA_INVERT	0x20000000
@@ -92,12 +97,18 @@ struct mxcfb_rect {
 #define EPDC_FLAG_USE_ALT_BUFFER		0x100
 #define EPDC_FLAG_TEST_COLLISION		0x200
 #define EPDC_FLAG_GROUP_UPDATE			0x400
+#define EPDC_FLAG_USE_AAD			0x1000
 #define EPDC_FLAG_USE_DITHERING_Y1		0x2000
 #define EPDC_FLAG_USE_DITHERING_Y4		0x4000
+#define EPDC_FLAG_USE_DITHERING_NTX_D8		0x100000
 
 #define FB_POWERDOWN_DISABLE			-1
 
 struct mxcfb_alt_buffer_data {
+#if defined(CONFIG_ANDROID) || defined (ANDROID)//[
+#else//][!CONFIG_ANDROID
+	void *virt_addr;
+#endif//]!CONFIG_ANDROID
 	__u32 phys_addr;
 	__u32 width;	/* width of entire buffer */
 	__u32 height;	/* height of entire buffer */
@@ -110,7 +121,7 @@ struct mxcfb_update_data {
 	__u32 update_mode;
 	__u32 update_marker;
 	int temp;
-	uint flags;
+	unsigned int flags;
 	struct mxcfb_alt_buffer_data alt_buffer_data;
 };
 
@@ -130,6 +141,13 @@ struct mxcfb_waveform_modes {
 	int mode_gc8;
 	int mode_gc16;
 	int mode_gc32;
+
+//#ifdef CONFIG_MACH_MX6SL_NTX //[
+	int mode_aa;
+	int mode_aad;
+	int mode_gl16;
+	int mode_a2;
+//#endif //] CONFIG_MACH_MX6SL_NTX 
 };
 
 /*
@@ -140,7 +158,7 @@ struct mxcfb_csc_matrix {
 	int param[5][3];
 };
 
-#define MXCFB_WAIT_FOR_VSYNC	_IOR('F', 0x20, unsigned long long)
+#define MXCFB_WAIT_FOR_VSYNC	_IOW('F', 0x20, u_int32_t)
 #define MXCFB_SET_GBL_ALPHA     _IOW('F', 0x21, struct mxcfb_gbl_alpha)
 #define MXCFB_SET_CLR_KEY       _IOW('F', 0x22, struct mxcfb_color_key)
 #define MXCFB_SET_OVERLAY_POS   _IOWR('F', 0x24, struct mxcfb_pos)
@@ -160,7 +178,12 @@ struct mxcfb_csc_matrix {
 #define MXCFB_SET_TEMPERATURE		_IOW('F', 0x2C, int32_t)
 #define MXCFB_SET_AUTO_UPDATE_MODE	_IOW('F', 0x2D, __u32)
 #define MXCFB_SEND_UPDATE		_IOW('F', 0x2E, struct mxcfb_update_data)
-#define MXCFB_WAIT_FOR_UPDATE_COMPLETE	_IOWR('F', 0x2F, struct mxcfb_update_marker_data)
+#ifdef MX50_IOCTL_IF//[
+#define MXCFB_WAIT_FOR_UPDATE_COMPLETE	_IOW('F', 0x2F, __u32)
+#define MXCFB_WAIT_FOR_UPDATE_COMPLETE2 _IOWR('F', 0x35, struct mxcfb_update_marker_data)
+#else //][!MX50_IOCTL_IF
+#define MXCFB_WAIT_FOR_UPDATE_COMPLETE _IOWR('F', 0x35, struct mxcfb_update_marker_data)
+#endif//] MX50_IOCTL_IF
 #define MXCFB_SET_PWRDOWN_DELAY		_IOW('F', 0x30, int32_t)
 #define MXCFB_GET_PWRDOWN_DELAY		_IOR('F', 0x31, int32_t)
 #define MXCFB_SET_UPDATE_SCHEME		_IOW('F', 0x32, __u32)

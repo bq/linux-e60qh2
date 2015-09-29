@@ -26,6 +26,11 @@
 #include <trace/events/power.h>
 
 #include "power.h"
+extern void cpufreq_save_default_governor(void);
+extern void cpufreq_restore_default_governor(void);
+extern void cpufreq_set_conservative_governor(void);
+extern void cpufreq_set_performance_governor(void);
+extern void cpufreq_set_conservative_governor_param(int up_th, int down_th);
 
 const char *const pm_states[PM_SUSPEND_MAX] = {
 #ifdef CONFIG_EARLYSUSPEND
@@ -273,6 +278,12 @@ int enter_state(suspend_state_t state)
 	if (!valid_state(state))
 		return -ENODEV;
 
+#ifndef CONFIG_CPUFREQ_GOV_ON_EARLYSUPSEND//[
+	cpufreq_save_default_governor();
+	cpufreq_set_performance_governor();
+#endif //] CONFIG_CPUFREQ_GOV_ON_EARLYSUPSEND
+
+
 	if (!mutex_trylock(&pm_mutex))
 		return -EBUSY;
 
@@ -281,6 +292,7 @@ int enter_state(suspend_state_t state)
 	printk("done.\n");
 
 	pr_debug("PM: Preparing system for %s sleep\n", pm_states[state]);
+
 	error = suspend_prepare();
 	if (error)
 		goto Unlock;
@@ -297,7 +309,13 @@ int enter_state(suspend_state_t state)
 	pr_debug("PM: Finishing wakeup.\n");
 	suspend_finish();
  Unlock:
+
 	mutex_unlock(&pm_mutex);
+
+#ifndef CONFIG_CPUFREQ_GOV_ON_EARLYSUPSEND//[
+	cpufreq_restore_default_governor();
+#endif //] CONFIG_CPUFREQ_GOV_ON_EARLYSUPSEND
+
 	return error;
 }
 

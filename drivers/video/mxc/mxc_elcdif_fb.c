@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2012 Freescale Semiconductor, Inc.
+ * Copyright (C) 2010-2013 Freescale Semiconductor, Inc.
  */
 
 /*
@@ -42,6 +42,9 @@
 #include <mach/hardware.h>
 
 #include "elcdif_regs.h"
+
+#define GDEBUG 10
+#include <linux/gallen_dbg.h>
 
 /*  ELCDIF Pixel format definitions */
 /*  Four-character-code (FOURCC) */
@@ -882,43 +885,61 @@ static int mxc_elcdif_fb_set_par(struct fb_info *fbi)
 	struct elcdif_signal_cfg sig_cfg;
 	int mem_len;
 
+	GALLEN_DBGLOCAL_BEGIN();
+
 	dev_dbg(fbi->device, "Reconfiguring framebuffer\n");
 
 	/* If parameter no change, don't reconfigure. */
-	if (mxc_elcdif_fb_par_equal(fbi, data) && (data->running == true))
+	if (mxc_elcdif_fb_par_equal(fbi, data) && (data->running == true)) {
+		GALLEN_DBGLOCAL_ESC();
 		return 0;
+	}
 
 	sema_init(&data->flip_sem, 1);
 
 	/* release prev panel */
 	if (!g_elcdif_pix_clk_enable) {
+		GALLEN_DBGLOCAL_RUNLOG(0);
 		clk_enable(g_elcdif_pix_clk);
+	printk("[GALLEN DBG][SKIP %s-%d]\n",__FUNCTION__,__LINE__);GALLEN_DBGLOCAL_ESC();return -EIO;
 		g_elcdif_pix_clk_enable = true;
 	}
+	printk("[GALLEN DBG][SKIP %s-%d]\n",__FUNCTION__,__LINE__);GALLEN_DBGLOCAL_ESC();return -EIO;
 	mxc_elcdif_blank_panel(FB_BLANK_POWERDOWN);
+	printk("[GALLEN DBG][SKIP %s-%d]\n",__FUNCTION__,__LINE__);GALLEN_DBGLOCAL_ESC();return -EIO;
 	mxc_elcdif_stop();
 	release_dotclk_panel();
 	mxc_elcdif_dma_release();
 	mxc_elcdif_fb_set_fix(fbi);
 	if (g_elcdif_pix_clk_enable) {
+		GALLEN_DBGLOCAL_RUNLOG(1);
 		clk_disable(g_elcdif_pix_clk);
 		g_elcdif_pix_clk_enable = false;
 	}
 
 	mem_len = fbi->var.yres_virtual * fbi->fix.line_length;
 	if (!fbi->fix.smem_start || (mem_len > fbi->fix.smem_len)) {
-		if (fbi->fix.smem_start)
+		GALLEN_DBGLOCAL_RUNLOG(2);
+		if (fbi->fix.smem_start) {
+			GALLEN_DBGLOCAL_RUNLOG(3);
 			mxc_elcdif_fb_unmap_video_memory(fbi);
+		}
 
-		if (mxc_elcdif_fb_map_video_memory(fbi) < 0)
+		if (mxc_elcdif_fb_map_video_memory(fbi) < 0) {
+			GALLEN_DBGLOCAL_ESC();
 			return -ENOMEM;
+		}
 	}
 
-	if (data->next_blank != FB_BLANK_UNBLANK)
+	if (data->next_blank != FB_BLANK_UNBLANK) {
+		GALLEN_DBGLOCAL_ESC();
 		return 0;
+	}
 
+	printk("[GALLEN DBG][SKIP %s-%d]\n",__FUNCTION__,__LINE__);return -EIO; // pass
 	/* init next panel */
 	if (!g_elcdif_pix_clk_enable) {
+		GALLEN_DBGLOCAL_RUNLOG(4);
 		clk_enable(g_elcdif_pix_clk);
 		g_elcdif_pix_clk_enable = true;
 	}
@@ -929,25 +950,38 @@ static int mxc_elcdif_fb_set_par(struct fb_info *fbi)
 		(u32) (PICOS2KHZ(fbi->var.pixclock) * 1000UL));
 
 	memset(&sig_cfg, 0, sizeof(sig_cfg));
-	if (fbi->var.sync & FB_SYNC_HOR_HIGH_ACT)
+	if (fbi->var.sync & FB_SYNC_HOR_HIGH_ACT) {
+		GALLEN_DBGLOCAL_RUNLOG(5);
 		sig_cfg.Hsync_pol = true;
-	if (fbi->var.sync & FB_SYNC_VERT_HIGH_ACT)
+	}
+
+	if (fbi->var.sync & FB_SYNC_VERT_HIGH_ACT) {
+		GALLEN_DBGLOCAL_RUNLOG(6);
 		sig_cfg.Vsync_pol = true;
-	if (fbi->var.sync & FB_SYNC_CLK_LAT_FALL)
+	}
+
+	if (fbi->var.sync & FB_SYNC_CLK_LAT_FALL) {
+		GALLEN_DBGLOCAL_RUNLOG(6);
 		sig_cfg.clk_pol = true;
-	if (!(fbi->var.sync & FB_SYNC_OE_LOW_ACT))
+	}
+
+	if (!(fbi->var.sync & FB_SYNC_OE_LOW_ACT)) {
+		GALLEN_DBGLOCAL_RUNLOG(7);
 		sig_cfg.enable_pol = true;
+	}
+
+	printk("[GALLEN DBG][SKIP %s-%d]\n",__FUNCTION__,__LINE__);return -EIO;
 
 	setup_dotclk_panel((PICOS2KHZ(fbi->var.pixclock)) * 1000UL,
 			   fbi->var.vsync_len,
-			   fbi->var.upper_margin +
-			   fbi->var.yres + fbi->var.lower_margin,
-			   fbi->var.upper_margin,
+			   fbi->var.upper_margin + fbi->var.yres +
+			   fbi->var.lower_margin + fbi->var.vsync_len,
+			   fbi->var.upper_margin + fbi->var.vsync_len,
 			   fbi->var.yres,
 			   fbi->var.hsync_len,
-			   fbi->var.left_margin +
-			   fbi->var.xres + fbi->var.right_margin,
-			   fbi->var.left_margin,
+			   fbi->var.left_margin + fbi->var.xres +
+			   fbi->var.right_margin + fbi->var.hsync_len,
+			   fbi->var.left_margin + fbi->var.hsync_len,
 			   fbi->var.xres,
 			   bpp_to_pixfmt(fbi),
 			   data->output_pix_fmt,
@@ -961,12 +995,14 @@ static int mxc_elcdif_fb_set_par(struct fb_info *fbi)
 							 &fbi->modelist);
 	data->var = fbi->var;
 
+	GALLEN_DBGLOCAL_END();
 	return 0;
 }
 
 static int mxc_elcdif_fb_check_var(struct fb_var_screeninfo *var,
 				 struct fb_info *info)
 {
+	//GALLEN_DBGLOCAL_BEGIN();
 	if (var->xres_virtual < var->xres)
 		var->xres_virtual = var->xres;
 	if (var->yres_virtual < var->yres)
@@ -1050,7 +1086,7 @@ static int mxc_elcdif_fb_check_var(struct fb_var_screeninfo *var,
 	var->height = -1;
 	var->width = -1;
 	var->grayscale = 0;
-
+	//GALLEN_DBGLOCAL_END();
 	return 0;
 }
 
@@ -1301,6 +1337,23 @@ static int mxc_elcdif_fb_unmap_video_memory(struct fb_info *fbi)
 	return 0;
 }
 
+static ssize_t show_disp_dev(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	if (dev) {
+		char *panel_type = dev->platform_data;
+
+		if (panel_type)
+			return sprintf(buf, "%s", panel_type);
+		else
+			return sprintf(buf, "elcd default");
+	} else {
+		dev_err(dev, "%s[%s], none dev\n", __FILE__, __func__);
+		return 0;
+	}
+}
+static DEVICE_ATTR(fsl_disp_dev_property, S_IRUGO, show_disp_dev, NULL);
+
 static int mxc_elcdif_fb_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -1311,6 +1364,8 @@ static int mxc_elcdif_fb_probe(struct platform_device *pdev)
 	const struct fb_videomode *mode;
 	struct fb_videomode m;
 	int num;
+
+	GALLEN_DBGLOCAL_BEGIN();
 
 	fbi = framebuffer_alloc(sizeof(struct mxc_elcdif_fb_data), &pdev->dev);
 	if (fbi == NULL) {
@@ -1331,6 +1386,14 @@ static int mxc_elcdif_fb_probe(struct platform_device *pdev)
 		goto out;
 
 	g_elcdif_dev = &pdev->dev;
+
+	{
+		g_elcdif_pix_clk = clk_get(g_elcdif_dev, "elcdif_pix");
+		clk_set_rate(g_elcdif_pix_clk, 25000000);
+		clk_enable(g_elcdif_pix_clk);
+		printk("[GALLEN DBG][SKIP %s-%d]\n",__FUNCTION__,__LINE__);
+		goto err0;
+	}
 
 	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	if (res == NULL) {
@@ -1460,6 +1523,12 @@ static int mxc_elcdif_fb_probe(struct platform_device *pdev)
 	 * access ELCDIF registers.
 	 */
 	clk_set_rate(g_elcdif_pix_clk, 25000000);
+	{
+			clk_enable(g_elcdif_pix_clk);
+			printk("skip elcdif ...\n");
+			goto err3;
+	}
+
 
 	fbi->var.activate |= FB_ACTIVATE_FORCE;
 	console_lock();
@@ -1467,6 +1536,7 @@ static int mxc_elcdif_fb_probe(struct platform_device *pdev)
 	ret = fb_set_var(fbi, &fbi->var);
 	fbi->flags &= ~FBINFO_MISC_USEREVENT;
 	console_unlock();
+
 
 	if (data->cur_blank == FB_BLANK_UNBLANK) {
 		console_lock();
@@ -1478,7 +1548,15 @@ static int mxc_elcdif_fb_probe(struct platform_device *pdev)
 	if (ret)
 		goto err3;
 
-	platform_set_drvdata(pdev, fbi);
+
+	fbi->dev->platform_data = pdata->panel_type;
+
+	ret = device_create_file(fbi->dev, &dev_attr_fsl_disp_dev_property);
+	if (ret)
+		dev_err(&pdev->dev, "Error %d on creating file for disp "
+						" device property\n", ret);
+
+	GALLEN_DBGLOCAL_ESC();
 
 	return 0;
 err3:
@@ -1491,6 +1569,8 @@ err0:
 	fb_dealloc_cmap(&fbi->cmap);
 	framebuffer_release(fbi);
 out:
+
+	GALLEN_DBGLOCAL_END();
 	return ret;
 }
 
@@ -1528,13 +1608,16 @@ static int mxc_elcdif_fb_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_PM
+#if 0
+//#ifdef CONFIG_PM
 static int mxc_elcdif_fb_suspend(struct platform_device *pdev,
 			       pm_message_t state)
 {
 	struct fb_info *fbi = platform_get_drvdata(pdev);
 	struct mxc_elcdif_fb_data *data = (struct mxc_elcdif_fb_data *)fbi->par;
 	int saved_blank;
+
+	GALLEN_DBGLOCAL_BEGIN();
 
 	console_lock();
 	fb_set_suspend(fbi, 1);
@@ -1557,6 +1640,9 @@ static int mxc_elcdif_fb_suspend(struct platform_device *pdev,
 	}
 	data->running = false;
 	console_unlock();
+
+	GALLEN_DBGLOCAL_END();
+
 	return 0;
 }
 
@@ -1565,11 +1651,14 @@ static int mxc_elcdif_fb_resume(struct platform_device *pdev)
 	struct fb_info *fbi = platform_get_drvdata(pdev);
 	struct mxc_elcdif_fb_data *data = (struct mxc_elcdif_fb_data *)fbi->par;
 
+	GALLEN_DBGLOCAL_BEGIN();
+
 	console_lock();
 	mxc_elcdif_fb_blank(data->next_blank, fbi);
 	fb_set_suspend(fbi, 0);
 	console_unlock();
 
+	GALLEN_DBGLOCAL_END();
 	return 0;
 }
 #else

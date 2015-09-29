@@ -1,6 +1,6 @@
 /****************************************************************************
 *
-*    Copyright (C) 2005 - 2013 by Vivante Corp.
+*    Copyright (C) 2005 - 2012 by Vivante Corp.
 *
 *    This program is free software; you can redistribute it and/or modify
 *    it under the terms of the GNU General Public License as published by
@@ -17,6 +17,8 @@
 *    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 *
 *****************************************************************************/
+
+
 
 
 #ifndef __gc_hal_driver_h_
@@ -162,10 +164,7 @@ typedef enum _gceHAL_COMMAND_CODES
 
     /* FSCALE_VAL. */
     gcvHAL_SET_FSCALE_VALUE,
-    gcvHAL_GET_FSCALE_VALUE,
-
-    /* Reset time stamp. */
-    gcvHAL_QUERY_RESET_TIME_STAMP,
+    gcvHAL_GET_FSCALE_VALUE
 }
 gceHAL_COMMAND_CODES;
 
@@ -253,19 +252,19 @@ typedef struct _gcsHAL_COMPOSE * gcsHAL_COMPOSE_PTR;
 typedef struct _gcsHAL_COMPOSE
 {
     /* Composition state buffer. */
-    gctUINT64                   physical;
-    gctUINT64                   logical;
-    gctUINT                     offset;
-    gctUINT                     size;
+    gctPHYS_ADDR                physical;
+    gctPOINTER                  logical;
+    gctSIZE_T                   offset;
+    gctSIZE_T                   size;
 
     /* Composition end signal. */
-    gctUINT64                   process;
-    gctUINT64                   signal;
+    gctHANDLE                   process;
+    gctSIGNAL                   signal;
 
     /* User signals. */
-    gctUINT64                   userProcess;
-    gctUINT64                   userSignal1;
-    gctUINT64                   userSignal2;
+    gctHANDLE                   userProcess;
+    gctSIGNAL                   userSignal1;
+    gctSIGNAL                   userSignal2;
 
 #if defined(__QNXNTO__)
     /* Client pulse side-channel connection ID. */
@@ -276,7 +275,6 @@ typedef struct _gcsHAL_COMPOSE
 #endif
 }
 gcsHAL_COMPOSE;
-
 
 typedef struct _gcsHAL_INTERFACE
 {
@@ -290,7 +288,7 @@ typedef struct _gcsHAL_INTERFACE
     gceSTATUS                   status;
 
     /* Handle to this interface channel. */
-    gctUINT64                   handle;
+    gctHANDLE                   handle;
 
     /* Pid of the client. */
     gctUINT32                   pid;
@@ -309,23 +307,23 @@ typedef struct _gcsHAL_INTERFACE
         /* gcvHAL_QUERY_VIDEO_MEMORY */
         struct _gcsHAL_QUERY_VIDEO_MEMORY
         {
-            /* Physical memory address of internal memory. Just a name. */
-            OUT gctUINT32               internalPhysical;
+            /* Physical memory address of internal memory. */
+            OUT gctPHYS_ADDR            internalPhysical;
 
-            /* Size in bytes of internal memory. */
-            OUT gctUINT64               internalSize;
+            /* Size in bytes of internal memory.*/
+            OUT gctSIZE_T               internalSize;
 
-            /* Physical memory address of external memory. Just a name. */
-            OUT gctUINT32               externalPhysical;
+            /* Physical memory address of external memory. */
+            OUT gctPHYS_ADDR            externalPhysical;
 
             /* Size in bytes of external memory.*/
-            OUT gctUINT64               externalSize;
+            OUT gctSIZE_T               externalSize;
 
-            /* Physical memory address of contiguous memory. Just a name. */
-            OUT gctUINT32               contiguousPhysical;
+            /* Physical memory address of contiguous memory. */
+            OUT gctPHYS_ADDR            contiguousPhysical;
 
             /* Size in bytes of contiguous memory.*/
-            OUT gctUINT64               contiguousSize;
+            OUT gctSIZE_T               contiguousSize;
         }
         QueryVideoMemory;
 
@@ -335,28 +333,28 @@ typedef struct _gcsHAL_INTERFACE
         /* gcvHAL_MAP_MEMORY */
         struct _gcsHAL_MAP_MEMORY
         {
-            /* Physical memory address to map. Just a name on Linux/Qnx. */
-            IN gctUINT32                physical;
+            /* Physical memory address to map. */
+            IN gctPHYS_ADDR             physical;
 
             /* Number of bytes in physical memory to map. */
-            IN gctUINT64                bytes;
+            IN gctSIZE_T                bytes;
 
             /* Address of mapped memory. */
-            OUT gctUINT64               logical;
+            OUT gctPOINTER              logical;
         }
         MapMemory;
 
         /* gcvHAL_UNMAP_MEMORY */
         struct _gcsHAL_UNMAP_MEMORY
         {
-            /* Physical memory address to unmap. Just a name on Linux/Qnx. */
-            IN gctUINT32                physical;
+            /* Physical memory address to unmap. */
+            IN gctPHYS_ADDR             physical;
 
             /* Number of bytes in physical memory to unmap. */
-            IN gctUINT64                bytes;
+            IN gctSIZE_T                bytes;
 
             /* Address of mapped memory to unmap. */
-            IN gctUINT64                logical;
+            IN gctPOINTER               logical;
         }
         UnmapMemory;
 
@@ -375,8 +373,8 @@ typedef struct _gcsHAL_INTERFACE
             /* Memory pool to allocate from. */
             IN OUT gcePOOL              pool;
 
-            /* Allocated video memory in gcuVIDMEM_NODE. */
-            OUT gctUINT64               node;
+            /* Allocated video memory. */
+            OUT gcuVIDMEM_NODE_PTR      node;
         }
         AllocateLinearVideoMemory;
 
@@ -401,24 +399,24 @@ typedef struct _gcsHAL_INTERFACE
             /* Memory pool to allocate from. */
             IN OUT gcePOOL              pool;
 
-            /* Allocated video memory in gcuVIDMEM_NODE. */
-            OUT gctUINT64               node;
+            /* Allocated video memory. */
+            OUT gcuVIDMEM_NODE_PTR      node;
         }
         AllocateVideoMemory;
 
         /* gcvHAL_FREE_VIDEO_MEMORY */
         struct _gcsHAL_FREE_VIDEO_MEMORY
         {
-            /* Allocated video memory in gcuVIDMEM_NODE. */
-            IN gctUINT64        node;
+            /* Allocated video memory. */
+            IN gcuVIDMEM_NODE_PTR       node;
 
 #ifdef __QNXNTO__
 /* TODO: This is part of the unlock - why is it here? */
             /* Mapped logical address to unmap in user space. */
-            OUT gctUINT64       memory;
+            OUT gctPOINTER              memory;
 
             /* Number of bytes to allocated. */
-            OUT gctUINT64       bytes;
+            OUT gctSIZE_T               bytes;
 #endif
         }
         FreeVideoMemory;
@@ -426,33 +424,33 @@ typedef struct _gcsHAL_INTERFACE
         /* gcvHAL_LOCK_VIDEO_MEMORY */
         struct _gcsHAL_LOCK_VIDEO_MEMORY
         {
-            /* Allocated video memory gcuVIDMEM_NODE gcuVIDMEM_NODE. */
-            IN gctUINT64            node;
+            /* Allocated video memory. */
+            IN gcuVIDMEM_NODE_PTR       node;
 
             /* Cache configuration. */
             /* Only gcvPOOL_CONTIGUOUS and gcvPOOL_VIRUTAL
             ** can be configured */
-            IN gctBOOL              cacheable;
+            IN gctBOOL                  cacheable;
 
             /* Hardware specific address. */
-            OUT gctUINT32           address;
+            OUT gctUINT32               address;
 
             /* Mapped logical address. */
-            OUT gctUINT64           memory;
+            OUT gctPOINTER              memory;
         }
         LockVideoMemory;
 
         /* gcvHAL_UNLOCK_VIDEO_MEMORY */
         struct _gcsHAL_UNLOCK_VIDEO_MEMORY
         {
-            /* Allocated video memory in gcuVIDMEM_NODE. */
-            IN gctUINT64            node;
+            /* Allocated video memory. */
+            IN gcuVIDMEM_NODE_PTR       node;
 
             /* Type of surface. */
-            IN gceSURF_TYPE         type;
+            IN gceSURF_TYPE             type;
 
             /* Flag to unlock surface asynchroneously. */
-            IN OUT gctBOOL          asynchroneous;
+            IN OUT gctBOOL              asynchroneous;
         }
         UnlockVideoMemory;
 
@@ -460,13 +458,13 @@ typedef struct _gcsHAL_INTERFACE
         struct _gcsHAL_ALLOCATE_NON_PAGED_MEMORY
         {
             /* Number of bytes to allocate. */
-            IN OUT gctUINT64        bytes;
+            IN OUT gctSIZE_T            bytes;
 
-            /* Physical address of allocation. Just a name. */
-            OUT gctUINT32           physical;
+            /* Physical address of allocation. */
+            OUT gctPHYS_ADDR            physical;
 
             /* Logical address of allocation. */
-            OUT gctUINT64           logical;
+            OUT gctPOINTER              logical;
         }
         AllocateNonPagedMemory;
 
@@ -474,13 +472,13 @@ typedef struct _gcsHAL_INTERFACE
         struct _gcsHAL_FREE_NON_PAGED_MEMORY
         {
             /* Number of bytes allocated. */
-            IN gctUINT64            bytes;
+            IN gctSIZE_T                bytes;
 
-            /* Physical address of allocation. Just a name. */
-            IN gctUINT32            physical;
+            /* Physical address of allocation. */
+            IN gctPHYS_ADDR             physical;
 
             /* Logical address of allocation. */
-            IN gctUINT64            logical;
+            IN gctPOINTER               logical;
         }
         FreeNonPagedMemory;
 
@@ -488,13 +486,13 @@ typedef struct _gcsHAL_INTERFACE
         struct _gcsHAL_ALLOCATE_VIRTUAL_COMMAND_BUFFER
         {
             /* Number of bytes to allocate. */
-            IN OUT gctUINT64        bytes;
+            IN OUT gctSIZE_T            bytes;
 
-            /* Physical address of allocation. Just a name. */
-            OUT gctUINT32           physical;
+            /* Physical address of allocation. */
+            OUT gctPHYS_ADDR            physical;
 
             /* Logical address of allocation. */
-            OUT gctUINT64           logical;
+            OUT gctPOINTER              logical;
         }
         AllocateVirtualCommandBuffer;
 
@@ -502,38 +500,38 @@ typedef struct _gcsHAL_INTERFACE
         struct _gcsHAL_FREE_VIRTUAL_COMMAND_BUFFER
         {
             /* Number of bytes allocated. */
-            IN gctUINT64            bytes;
+            IN gctSIZE_T                bytes;
 
-            /* Physical address of allocation. Just a name. */
-            IN gctUINT32            physical;
+            /* Physical address of allocation. */
+            IN gctPHYS_ADDR             physical;
 
             /* Logical address of allocation. */
-            IN gctUINT64            logical;
+            IN gctPOINTER               logical;
         }
         FreeVirtualCommandBuffer;
 
         /* gcvHAL_EVENT_COMMIT. */
         struct _gcsHAL_EVENT_COMMIT
         {
-            /* Event queue in gcsQUEUE. */
-            IN gctUINT64             queue;
+            /* Event queue. */
+            IN gcsQUEUE_PTR             queue;
         }
         Event;
 
         /* gcvHAL_COMMIT */
         struct _gcsHAL_COMMIT
         {
-            /* Context buffer object gckCONTEXT. */
-            IN gctUINT64            context;
+            /* Context buffer object. */
+            IN gckCONTEXT               context;
 
-            /* Command buffer gcoCMDBUF. */
-            IN gctUINT64            commandBuffer;
+            /* Command buffer. */
+            IN gcoCMDBUF                commandBuffer;
 
-            /* State delta buffer in gcsSTATE_DELTA. */
-            gctUINT64               delta;
+            /* State delta buffer. */
+            gcsSTATE_DELTA_PTR          delta;
 
-            /* Event queue in gcsQUEUE. */
-            IN gctUINT64            queue;
+            /* Event queue. */
+            IN gcsQUEUE_PTR             queue;
         }
         Commit;
 
@@ -541,16 +539,16 @@ typedef struct _gcsHAL_INTERFACE
         struct _gcsHAL_MAP_USER_MEMORY
         {
             /* Base address of user memory to map. */
-            IN gctUINT64                memory;
+            IN gctPOINTER               memory;
 
             /* Physical address of user memory to map. */
             IN gctUINT32                physical;
 
             /* Size of user memory in bytes to map. */
-            IN gctUINT64                size;
+            IN gctSIZE_T                size;
 
-            /* Info record required by gcvHAL_UNMAP_USER_MEMORY. Just a name. */
-            OUT gctUINT32               info;
+            /* Info record required by gcvHAL_UNMAP_USER_MEMORY. */
+            OUT gctPOINTER              info;
 
             /* Physical address of mapped memory. */
             OUT gctUINT32               address;
@@ -561,13 +559,13 @@ typedef struct _gcsHAL_INTERFACE
         struct _gcsHAL_UNMAP_USER_MEMORY
         {
             /* Base address of user memory to unmap. */
-            IN gctUINT64                memory;
+            IN gctPOINTER               memory;
 
             /* Size of user memory in bytes to unmap. */
-            IN gctUINT64                size;
+            IN gctSIZE_T                size;
 
-            /* Info record returned by gcvHAL_MAP_USER_MEMORY. Just a name. */
-            IN gctUINT32                info;
+            /* Info record returned by gcvHAL_MAP_USER_MEMORY. */
+            IN gctPOINTER               info;
 
             /* Physical address of mapped memory as returned by
                gcvHAL_MAP_USER_MEMORY. */
@@ -599,14 +597,14 @@ typedef struct _gcsHAL_INTERFACE
         /* gcvHAL_SIGNAL. */
         struct _gcsHAL_SIGNAL
         {
-            /* Signal handle to signal gctSIGNAL. */
-            IN gctUINT64                signal;
+            /* Signal handle to signal. */
+            IN gctSIGNAL                signal;
 
-            /* Reserved gctSIGNAL. */
-            IN gctUINT64                auxSignal;
+            /* Reserved. */
+            IN gctSIGNAL                auxSignal;
 
-            /* Process owning the signal gctHANDLE. */
-            IN gctUINT64                process;
+            /* Process owning the signal. */
+            IN gctHANDLE                process;
 
 #if defined(__QNXNTO__)
             /* Client pulse side-channel connection ID. Set by client in gcoOS_CreateSignal. */
@@ -635,16 +633,16 @@ typedef struct _gcsHAL_INTERFACE
         struct _gcsHAL_ALLOCATE_CONTIGUOUS_MEMORY
         {
             /* Number of bytes to allocate. */
-            IN OUT gctUINT64            bytes;
+            IN OUT gctSIZE_T            bytes;
 
             /* Hardware address of allocation. */
             OUT gctUINT32               address;
 
-            /* Physical address of allocation. Just a name. */
-            OUT gctUINT32               physical;
+            /* Physical address of allocation. */
+            OUT gctPHYS_ADDR            physical;
 
             /* Logical address of allocation. */
-            OUT gctUINT64               logical;
+            OUT gctPOINTER              logical;
         }
         AllocateContiguousMemory;
 
@@ -652,13 +650,13 @@ typedef struct _gcsHAL_INTERFACE
         struct _gcsHAL_FREE_CONTIGUOUS_MEMORY
         {
             /* Number of bytes allocated. */
-            IN gctUINT64                bytes;
+            IN gctSIZE_T                bytes;
 
-            /* Physical address of allocation. Just a name. */
-            IN gctUINT32                physical;
+            /* Physical address of allocation. */
+            IN gctPHYS_ADDR             physical;
 
             /* Logical address of allocation. */
-            IN gctUINT64                logical;
+            IN gctPOINTER               logical;
         }
         FreeContiguousMemory;
 
@@ -728,8 +726,8 @@ typedef struct _gcsHAL_INTERFACE
         /* gcvHAL_PROFILE_REGISTERS_2D */
         struct _gcsHAL_PROFILE_REGISTERS_2D
         {
-            /* Data read in gcs2D_PROFILE. */
-            OUT gctUINT64       hwProfile2D;
+            /* Data read. */
+            OUT gcs2D_PROFILE_PTR       hwProfile2D;
         }
         RegisterProfileData2D;
 #endif
@@ -768,7 +766,7 @@ typedef struct _gcsHAL_INTERFACE
             IN gctBOOL                  map;
 
             /* Physical address. */
-            IN OUT gctUINT64            physical;
+            IN OUT gctPHYS_ADDR         physical;
         }
         MapPhysical;
 
@@ -793,12 +791,10 @@ typedef struct _gcsHAL_INTERFACE
         struct _gcsHAL_CACHE
         {
             IN gceCACHEOPERATION        operation;
-            /* gctHANDLE */
-            IN gctUINT64                process;
-            IN gctUINT64                logical;
-            IN gctUINT64                bytes;
-            /* gcuVIDMEM_NODE_PTR */
-            IN gctUINT64                node;
+            IN gctHANDLE                process;
+            IN gctPOINTER               logical;
+            IN gctSIZE_T                bytes;
+            IN gcuVIDMEM_NODE_PTR       node;
         }
         Cache;
 
@@ -865,30 +861,29 @@ typedef struct _gcsHAL_INTERFACE
         /* gcvHAL_ATTACH */
         struct _gcsHAL_ATTACH
         {
-            /* Context buffer object gckCONTEXT. Just a name. */
-            OUT gctUINT32               context;
+            /* Context buffer object. */
+            OUT gckCONTEXT              context;
 
             /* Number of states in the buffer. */
-            OUT gctUINT64               stateCount;
+            OUT gctSIZE_T               stateCount;
         }
         Attach;
 
         /* gcvHAL_DETACH */
         struct _gcsHAL_DETACH
         {
-            /* Context buffer object gckCONTEXT. Just a name. */
-            IN gctUINT32                context;
+            /* Context buffer object. */
+            IN gckCONTEXT               context;
         }
         Detach;
 
         /* gcvHAL_COMPOSE. */
-        gcsHAL_COMPOSE            Compose;
+        gcsHAL_COMPOSE                  Compose;
 
         /* gcvHAL_GET_FRAME_INFO. */
         struct _gcsHAL_GET_FRAME_INFO
         {
-            /* gcsHAL_FRAME_INFO* */
-            OUT gctUINT64     frameInfo;
+            OUT gcsHAL_FRAME_INFO *     frameInfo;
         }
         GetFrameInfo;
 
@@ -903,17 +898,17 @@ typedef struct _gcsHAL_INTERFACE
 		/* gcvHAL_COMMIT */
 		struct _gcsHAL_VGCOMMIT
 		{
-			/* Context buffer in gcsVGCONTEXT. */
-			IN gctUINT64			context;
+			/* Context buffer. */
+			IN gcsVGCONTEXT_PTR			context;
 
-			/* Command queue in gcsVGCMDQUEUE. */
-			IN gctUINT64			queue;
+			/* Command queue. */
+			IN gcsVGCMDQUEUE_PTR			queue;
 
 			/* Number of entries in the queue. */
-			IN gctUINT			entryCount;
+			IN gctUINT					entryCount;
 
-			/* Task table in gcsTASK_MASTER_TABLE. */
-			IN gctUINT64	                taskTable;
+			/* Task table. */
+			IN gcsTASK_MASTER_TABLE_PTR	taskTable;
 		}
 		VGCommit;
 
@@ -931,13 +926,11 @@ typedef struct _gcsHAL_INTERFACE
         {
             IN gctUINT32            pid;
             IN gctUINT32            dataId;
-            /* gcuVIDMEM_NODE_PTR */
-            IN gctUINT64            node;
-            /* gctUINT8_PTR */
-            OUT gctUINT64           data;
-            /* fix size. gctUINT8_PTR*/
-            OUT gctUINT64           nodeData;
-            gctUINT64               size;
+            IN gcuVIDMEM_NODE_PTR   node;
+            OUT gctUINT8_PTR        data;
+            /* fix size */
+            OUT gctUINT8_PTR        nodeData;
+            gctSIZE_T               size;
             IN gceVIDMEM_NODE_SHARED_INFO_TYPE infoType;
         }
         GetSharedInfo;
@@ -945,13 +938,10 @@ typedef struct _gcsHAL_INTERFACE
         struct _gcsHAL_SET_SHARED_INFO
         {
             IN gctUINT32            dataId;
-            /* gcuVIDMEM_NODE_PTR */
-            IN gctUINT64   node;
-            /* gctUINT8_PTR */
-            IN gctUINT64         data;
-            /* gctUINT8_PTR */
-            IN gctUINT64         nodeData;
-            IN gctUINT64            size;
+            IN gcuVIDMEM_NODE_PTR   node;
+            IN gctUINT8_PTR         data;
+            IN gctUINT8_PTR         nodeData;
+            IN gctSIZE_T            size;
             IN gceVIDMEM_NODE_SHARED_INFO_TYPE infoType;
         }
         SetSharedInfo;
@@ -969,12 +959,6 @@ typedef struct _gcsHAL_INTERFACE
             OUT gctUINT             maxValue;
         }
         GetFscaleValue;
-
-        struct _gcsHAL_QUERY_RESET_TIME_STAMP
-        {
-            OUT gctUINT64           timeStamp;
-        }
-        QueryResetTimeStamp;
     }
     u;
 }

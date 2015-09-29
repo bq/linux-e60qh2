@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright (C) 2012-2013 Freescale Semiconductor, Inc. All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,8 +18,18 @@
 
 #include <linux/linkage.h>
 #include <mach/hardware.h>
-#define IRAM_WAIT_SIZE 	(1 << 11)
+/*
+ * The code size is limited to 1.5K
+ * as we may need to store this code
+ * along with the suspend and DDR freq change
+ * code within 8K of IRAM.
+ */
 
+#define IRAM_WAIT_SIZE 	MX6SL_WFI_IRAM_CODE_SIZE
+
+.extern iram_tlb_phys_addr
+.extern mx6sl_wfi_iram_base
+.extern mx6sl_wfi_iram_phys_addr
 
 	.macro	sl_ddr_io_save
 
@@ -147,6 +157,7 @@ fifo_reset2_wait:
 
 	.endm
 
+	.align 3
 /*
  *  mx6sl_wait
  *
@@ -158,43 +169,93 @@ fifo_reset2_wait:
  */
 ENTRY(mx6sl_wait)
 
-    push {r4, r5, r6, r7, r8, r9, r10}
+    push {r4-r12}
 
 mx6sl_lpm_wfi:
+    mov    r11, r2
+
     /* Get the IRAM data storage address. */
     mov    r10, r1
-    mov	r9, r1 		/* get suspend_iram_base */
-     add	r9, r9, #IRAM_WAIT_SIZE	/* 4K */
+    mov    r9, r1 		/* get suspend_iram_base */
+    add    r9, r9, #IRAM_WAIT_SIZE	/* 1.5K */
+
+    /*
+     * To ensure no page table walks occur in DDR, we
+     * have a another page table stored in IRAM that only
+     * contains entries pointing to IRAM, AIPS1 and AIPS2.
+     * We need to set the TTBR1 to the new IRAM TLB.
+     * Do the following steps:
+     * 1. Flush the Branch Target Address Cache (BTAC)
+     * 2. Set TTBR1 to point to IRAM page table.
+     * 3. Disable page table walks in TTBR0 (PD0 = 1)
+     * 4. Set TTBR0.N=1, implying 0-2G is translated by TTBR0
+     *     and 2-4G is translated by TTBR1.
+     */
+
+    ldr    r6, =iram_tlb_phys_addr
+    ldr    r7, [r6]
+
+    /* Flush the BTAC. */
+    ldr    r6, =0x0
+    mcr    p15, 0, r6, c7, c1, 6
+
+    /* Disable Branch Prediction, Z bit in SCTLR. */
+    mrc    p15, 0, r6, c1, c0, 0
+    bic    r6, r6, #0x800
+    mcr    p15, 0, r6, c1, c0, 0
+
+    dsb
+    isb
+
+    /* Store the IRAM table in TTBR1 */
+    mcr    p15, 0, r7, c2, c0, 1
+
+    /* Read TTBCR and set PD0=1, N = 1 */
+    mrc    p15, 0, r6, c2, c0, 2
+    orr    r6, r6, #0x11
+    mcr    p15, 0, r6, c2, c0, 2
+
+    dsb
+    isb
+
+    /* flush the TLB */
+    ldr    r6, =0x0
+    mcr    p15, 0, r6, c8, c3, 0
+
+    /* Disable L1 data cache. */
+    mrc    p15, 0, r6, c1, c0, 0
+    bic    r6, r6, #0x4
+    mcr    p15, 0, r6, c1, c0, 0
+
+    dsb
+
+    /* 
+     * Sync L2 and then disable it.
+     */
+    dsb
+    ldr   r1, =L2_BASE_ADDR
+    add   r1, r1, #PERIPBASE_VIRT
+    ldr   r6, =0x0
+    str   r6, [r1, #0x730]
+    /* Disable L2. */
+    str   r6, [r1, #0x100]
+    dsb
+    isb
 
     ldr     r1, =MX6Q_IOMUXC_BASE_ADDR
     add   r1, r1, #PERIPBASE_VIRT
 
-      /* Save the DDR IO state. */
+     /* Save the DDR IO state. */
      sl_ddr_io_save
 
     ldr     r3, =ANATOP_BASE_ADDR
-    add   r3, r3, #PERIPBASE_VIRT
-
+    add     r3, r3, #PERIPBASE_VIRT
     ldr     r2, =CCM_BASE_ADDR
-    add   r2, r2, #PERIPBASE_VIRT
-
+    add     r2, r2, #PERIPBASE_VIRT
     ldr     r8, =MMDC_P0_BASE_ADDR
-    add   r8, r8, #PERIPBASE_VIRT
+    add     r8, r8, #PERIPBASE_VIRT
 
-
-    /* Prime all TLB entries. */
-    adr   r7, mx6sl_lpm_wfi               @Address in this function.
-
-    ldr     r6, [r7]
-
-    ldr     r6, [r8]
-    ldr     r6, [r3]
-    ldr     r6, [r2]
-    ldr     r6, [r1]
-
-     dsb
-
-     /* Disable Automatic power savings. */
+    /* Disable Automatic power savings. */
      ldr    r6, [r8, #0x404]
      orr    r6, r6, #0x01
      str    r6, [r8, #0x404]
@@ -215,6 +276,9 @@ poll_dvfs_set_1:
      orr     r6, r6, #0x100
      str     r6, [r8, #0x410]
 
+     cmp      r11, #1
+     beq      audio_mode
+
      /* Now set DDR rate to 1MHz. */
      /* DDR is from bypassed PLL2 on periph2_clk2 path.
        * Set the periph2_clk2_podf to divide by 8.
@@ -228,6 +292,15 @@ poll_dvfs_set_1:
      bic    r6, r6, #0x38
      orr    r6, r6, #0x10
      str     r6, [r2, #0x14]
+     b       mmdc_podf
+
+audio_mode:
+     /* MMDC is from PLL2_200M.
+       * Set the mmdc_podf to div by 8.
+       */
+     ldr    r6, [r2, #0x14]
+     orr    r6, r6, #0x38
+     str     r6, [r2, #0x14]
 
     /* Loop till podf is accepted. */
 mmdc_podf:
@@ -237,6 +310,9 @@ mmdc_podf:
 
       /* Set the DDR IO in LPM state. */
      sl_ddr_io_set_lpm
+
+     cmp      r11, #1
+     beq      do_audio_arm_clk
 
      /* Check if none of the PLLs are
       * locked, except PLL1 which will get
@@ -378,6 +454,32 @@ podf_loop:
      orr     r6, r6, #0x1
      str     r6, [r3, #0x150]
 
+     b      do_wfi
+
+do_audio_arm_clk:
+    /*
+     * ARM is from PLL2_PFD2_400M here.
+     * Switch ARM to bypassed PLL1.
+     */
+     ldr    r6, [r2, #0xC]
+     bic   r6, r6, #0x4
+     str   r6, [r2, #0xC]
+
+     /*
+      * Set the ARM_PODF to divide by 2
+      * as IPG is at 4MHz, we cannot run
+      * ARM_CLK above 9.6MHz when
+      * system enters WAIT mode.
+      */
+    ldr    r6, =0x2
+    str    r6, [r2, #0x10]
+
+    /* Loop till podf is accepted. */
+podf_loop_audio:
+     ldr     r6, [r2, #0x48]
+     cmp   r6, #0x0
+     bne   podf_loop_audio
+
 do_wfi:
      /* Now do WFI. */
      wfi
@@ -391,20 +493,24 @@ podf_loop1:
      cmp   r6, #0x0
      bne   podf_loop1
 
-      /* Check if powered down
-        * analog components.
-        */
-      cmp     r7, #0x1
-      bne     skip_analog_restore
+     cmp    r11, #1
+     beq    audio_arm_clk_restore
 
-     /*Power up the regular bandgap. */
+     /*
+      * Check if powered down
+      * analog components.
+      */
+     cmp     r7, #0x1
+     bne     skip_analog_restore
+
+     /* Power up the regular bandgap. */
      ldr     r6, [r3, #0x150]
      bic      r6, r6, #0x1
      str     r6, [r3, #0x150]
 
     /* turn on the bias current
-      * from the regular bandgap.
-      */
+     * from the regular bandgap.
+     */
      ldr     r6, [r3, #0x260]
      bic     r6, r6, #0x80
      str     r6, [r3, #0x260]
@@ -414,7 +520,8 @@ podf_loop1:
      bic     r6, r6, #0x20
      str     r6, [r3, #0x260]
 
-    /* Set the OSC bias current to max
+    /*
+     * Set the OSC bias current to max
      * value for normal operation.
      */
      ldr     r6, [r3, #0x150]
@@ -473,11 +580,23 @@ ahb_podf1:
      cmp   r6, #0x0
      bne   podf_loop1
 
-    mov	r9, r10 		/* get suspend_iram_base */
+     b     wfi_restore
+
+audio_arm_clk_restore:
+     /* Move ARM back to PLL2_PFD2_400M */
+     ldr    r6, [r2, #0xC]
+     orr   r6, r6, #0x4
+     str   r6, [r2, #0xC]
+
+wfi_restore:
+     mov	r9, r10 		/* get suspend_iram_base */
      add	r9, r9, #IRAM_WAIT_SIZE	/* 4K */
 
     /* Restore the DDR IO before exiting self-refresh. */
      sl_ddr_io_restore
+
+     cmp     r11, #1
+     beq     mmdc_audio_restore
 
     /* Set MMDC back to 24MHz. */
     /* Set periph2_clk2_podf to divide by 1. */
@@ -485,6 +604,15 @@ ahb_podf1:
      ldr    r6, [r2, #0x14]
      bic   r6, r6, #0x3f
      str    r6, [r2, #0x14]
+
+     b     mmdc_podf1
+
+mmdc_audio_restore:
+     /* Set MMDC back to 100MHz. */
+     ldr    r6, [r2, #0x14]
+     bic   r6, r6, #0x38
+     orr   r6, r6, #0x8
+     str    r6, [r2, $0x14]
 
 mmdc_podf1:
      ldr     r6, [r2, #0x48]
@@ -501,6 +629,55 @@ poll_dvfs_clear_1:
      and     r6, r6, #0x2000000
      cmp     r6, #0x2000000
      beq     poll_dvfs_clear_1
+
+     /* Enable Automatic power savings. */
+     ldr    r6, [r8, #0x404]
+     bic    r6, r6, #0x01
+     str    r6, [r8, #0x404]
+
+     /* clear SBS - unblock DDR accesses */
+     ldr     r6, [r8, #0x410]
+     bic     r6, r6, #0x100
+     str     r6, [r8, #0x410]
+
+     /* Enable L2. */
+     ldr   r1, =L2_BASE_ADDR
+     add   r1, r1, #PERIPBASE_VIRT
+     ldr   r6, =0x1
+     str   r6, [r1, #0x100]
+
+    /* Enable L1 data cache. */
+    mrc    p15, 0, r6, c1, c0, 0
+    orr    r6, r6, #0x4
+    mcr    p15, 0, r6, c1, c0, 0
+
+    /* Restore the TTBCR */
+
+    dsb
+    isb
+    /* Read TTBCR and set PD0=0, N = 0 */
+    mrc    p15, 0, r6, c2, c0, 2
+    bic    r6, r6, #0x11
+    mcr    p15, 0, r6, c2, c0, 2
+
+    dsb
+    isb
+
+    /* flush the TLB */
+    ldr    r6, =0x0
+    mcr    p15, 0, r6, c8, c3, 0
+    dsb
+    isb
+    
+    /* Enable Branch Prediction, Z bit in SCTLR. */
+    mrc    p15, 0, r6, c1, c0, 0
+    orr    r6, r6, #0x800
+    mcr    p15, 0, r6, c1, c0, 0
+
+    /* Flush the Branch Target Address Cache (BTAC) */
+    ldr    r6, =0x0
+    mcr    p15, 0, r6, c7, c1, 6
+
 
      /* Add these nops so that the
       * prefetcher will not try to get
@@ -538,18 +715,7 @@ poll_dvfs_clear_1:
      nop
      nop
 
-     /* Enable Automatic power savings. */
-     ldr    r6, [r8, #0x404]
-     bic    r6, r6, #0x01
-     str    r6, [r8, #0x404]
-
-     /* clear SBS - unblock DDR accesses */
-     ldr     r6, [r8, #0x410]
-     bic     r6, r6, #0x100
-     str     r6, [r8, #0x410]
-
-
-    pop {r4,r5, r6, r7, r8, r9, r10}
+    pop {r4-r12}
 
     /* Restore registers */
     mov     pc, lr
@@ -558,3 +724,4 @@ poll_dvfs_clear_1:
 ENTRY(mx6sl_do_wait)
     .word   mx6sl_wait
     .size    mx6sl_wait, . - mx6sl_wait
+

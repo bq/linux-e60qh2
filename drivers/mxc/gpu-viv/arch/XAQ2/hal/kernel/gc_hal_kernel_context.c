@@ -1,6 +1,6 @@
 /****************************************************************************
 *
-*    Copyright (C) 2005 - 2013 by Vivante Corp.
+*    Copyright (C) 2005 - 2012 by Vivante Corp.
 *
 *    This program is free software; you can redistribute it and/or modify
 *    it under the terms of the GNU General Public License as published by
@@ -17,6 +17,9 @@
 *    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 *
 *****************************************************************************/
+
+
+
 
 
 #include "gc_hal.h"
@@ -471,7 +474,7 @@ _InitializeContextBuffer(
     index += _SwitchPipe(Context, index, gcvPIPE_3D);
 
     /* Current context pointer. */
-#if gcdDEBUG
+#if gcdDEBUG && 1
     index += _State(Context, index, 0x03850 >> 2, 0x00000000, 1, gcvFALSE, gcvFALSE);
 #endif
 
@@ -1254,11 +1257,11 @@ gckCONTEXT_Construct(
             }
 
             /* Copy the current context. */
-            gckOS_MemCopy(
+            gcmkONERROR(gckOS_MemCopy(
                 tempContext->logical,
                 currContext->logical,
                 context->totalSize
-                );
+                ));
 
             /* Get the next context buffer. */
             tempContext = tempContext->next;
@@ -1439,7 +1442,7 @@ gckCONTEXT_Update(
             gcmkONERROR(gckKERNEL_OpenUserData(
                 kernel, needCopy,
                 Context->recordArray,
-                gcmUINT64_TO_PTR(kDelta->recordArray), Context->recordArraySize,
+                kDelta->recordArray, Context->recordArraySize,
                 (gctPOINTER *) &recordArray
                 ));
 
@@ -1548,13 +1551,13 @@ gckCONTEXT_Update(
             gcmkASSERT(kDelta->refCount >= 0);
 
             /* Get the next state delta. */
-            nDelta = gcmUINT64_TO_PTR(kDelta->next);
+            nDelta = kDelta->next;
 
             /* Get access to the state records. */
             gcmkONERROR(gckKERNEL_CloseUserData(
                 kernel, needCopy,
                 gcvFALSE,
-                gcmUINT64_TO_PTR(kDelta->recordArray), Context->recordArraySize,
+                kDelta->recordArray, Context->recordArraySize,
                 (gctPOINTER *) &recordArray
                 ));
 
@@ -1701,7 +1704,7 @@ OnError:
         gcmkVERIFY_OK(gckKERNEL_CloseUserData(
             kernel, needCopy,
             gcvFALSE,
-            gcmUINT64_TO_PTR(kDelta->recordArray), Context->recordArraySize,
+            kDelta->recordArray, Context->recordArraySize,
             (gctPOINTER *) &recordArray
             ));
 	}

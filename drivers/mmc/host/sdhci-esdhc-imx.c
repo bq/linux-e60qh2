@@ -34,7 +34,6 @@
 #define SDHCI_VENDOR_SPEC		0xC0
 #define  SDHCI_VENDOR_SPEC_SDIO_QUIRK	0x00000002
 
-#define SDHCI_MIX_CTRL_AC12EN		(1 << 2)
 #define SDHCI_MIX_CTRL_AC23EN		(1 << 7)
 #define SDHCI_MIX_CTRL_EXE_TUNE		(1 << 22)
 #define SDHCI_MIX_CTRL_SMPCLK_SEL	(1 << 23)
@@ -292,12 +291,9 @@ static void esdhc_writel_le(struct sdhci_host *host, u32 val, int reg)
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct pltfm_imx_data *imx_data = pltfm_host->priv;
 	u32 data;
-	struct esdhc_platform_data *boarddata
-				= host->mmc->parent->platform_data;
 
 	if (unlikely((reg == SDHCI_INT_ENABLE || reg == SDHCI_SIGNAL_ENABLE))) {
-		if ((boarddata->always_present) ||
-			(imx_data->flags & ESDHC_FLAG_GPIO_FOR_CD_WP))
+		if (imx_data->flags & ESDHC_FLAG_GPIO_FOR_CD_WP)
 			/*
 			 * these interrupts won't work with a custom
 			 * card_detect gpio (only applied to mx25/35)
@@ -560,11 +556,8 @@ static void esdhc_writew_le(struct sdhci_host *host, u16 val, int reg)
 		}
 		imx_data->scratchpad = val;
 
-		if (cpu_is_mx6() && (val & SDHCI_TRNS_AUTO_CMD23))
+		if (val & SDHCI_TRNS_AUTO_CMD23)
 			imx_data->scratchpad |= SDHCI_MIX_CTRL_AC23EN;
-
-		if (cpu_is_mx5() && (val & SDHCI_TRNS_AUTO_CMD12))
-			imx_data->scratchpad |= SDHCI_MIX_CTRL_AC12EN;
 
 		return;
 	case SDHCI_COMMAND:
@@ -789,9 +782,28 @@ static irqreturn_t cd_irq(int irq, void *data)
 		imx_data->scratchpad &= ~SDHCI_MIX_CTRL_SMPCLK_SEL;
 	}
 
+	esdhc_reset(sdhost);
+	mdelay(1);
+
 	tasklet_schedule(&sdhost->card_tasklet);
 	return IRQ_HANDLED;
 };
+
+extern int gSleep_Mode_Suspend;
+void eschc_cd_enable (struct sdhci_host *host, bool enable)
+{
+	struct esdhc_platform_data *boarddata = host->mmc->parent->platform_data;
+	if (gSleep_Mode_Suspend && boarddata->cd_gpio && (ESDHC_CD_GPIO == boarddata->cd_type)) {
+		if (enable) {
+			 request_irq(gpio_to_irq(boarddata->cd_gpio), cd_irq,
+				 IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,
+				 mmc_hostname(host->mmc), host);
+		}
+		else {
+			free_irq(gpio_to_irq(boarddata->cd_gpio), host);
+		}
+	}
+}
 
 static int esdhc_pltfm_init(struct sdhci_host *host, struct sdhci_pltfm_data *pdata)
 {
@@ -827,13 +839,13 @@ static int esdhc_pltfm_init(struct sdhci_host *host, struct sdhci_pltfm_data *pd
 
 	/*
 	 * on mx6dl TO 1.1, ADMA can work when ahb bus frequency is low,
-	 * like 24Mhz. MX53 does have working ADMA.
+	 * like 24Mhz.
 	 */
-	if (mx6dl_revision() >= IMX_CHIP_REVISION_1_1 || cpu_is_mx53())
+	if (mx6dl_revision() >= IMX_CHIP_REVISION_1_1)
 		host->quirks &= ~SDHCI_QUIRK_BROKEN_ADMA;
 
 	if (cpu_is_mx6())
-		host->quirks2 |= SDHCI_QUIRK_BROKEN_AUTO_CMD23;
+		host->quirks2 |= SDHCI_QUIRK_BROKEN_AUTO_CMD23,
 
 	/* write_protect can't be routed to controller, use gpio */
 	sdhci_esdhc_ops.get_ro = esdhc_pltfm_get_ro;
@@ -894,6 +906,12 @@ static int esdhc_pltfm_init(struct sdhci_host *host, struct sdhci_pltfm_data *pd
 			return 0;
 		}
 
+		if (ESDHC_CD_WIFI_PWR == boarddata->cd_type) {
+			extern void ntx_register_wifi_cd (irq_handler_t handler, void *data);
+			host->mmc->caps &= ~MMC_CAP_NONREMOVABLE;
+			ntx_register_wifi_cd (cd_irq, host);
+		}
+		else {
 		err = gpio_request_one(boarddata->wp_gpio, GPIOF_IN, "ESDHC_WP");
 		if (err) {
 			dev_warn(mmc_dev(host->mmc),
@@ -915,7 +933,7 @@ static int esdhc_pltfm_init(struct sdhci_host *host, struct sdhci_pltfm_data *pd
 			dev_warn(mmc_dev(host->mmc), "request irq error\n");
 			goto no_card_detect_irq;
 		}
-
+		}
 		imx_data->flags |= ESDHC_FLAG_GPIO_FOR_CD_WP;
 		/* Now we have a working card_detect again */
 		host->quirks &= ~SDHCI_QUIRK_BROKEN_CARD_DETECTION;

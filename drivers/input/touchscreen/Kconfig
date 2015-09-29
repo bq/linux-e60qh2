@@ -199,16 +199,6 @@ config TOUCHSCREEN_ELAN
 	  To compile this driver as a module, choose M here: the
 	  module will be called elan-touch.
 
-config TOUCHSCREEN_EGALAX_SINGLE_TOUCH
-	bool "EETI eGalax touchscreen as single-touch"
-	default N
-	depends on TOUCHSCREEN_EGALAX
-	help
-	  If you say yes here you get single-touch touchscreen support
-	  on the eGalax I2C controller.
-	  If you say "no", you'll get the normal multi-touch.
-
-
 config TOUCHSCREEN_FUJITSU
 	tristate "Fujitsu serial touchscreen"
 	select SERIO
@@ -795,4 +785,45 @@ config TOUCHSCREEN_DA9052
         help
           Say y here to support the touchscreen found on
           Dialog Semiconductor DA9052 PMIC
+
+config TOUCHSCREEN_ZFORCE
+       tristate "Neonode zForce IR touchscreen"
+       depends on I2C
+       help
+        Say Y here if you have a zForce touchscreen
+        controller
+
+        If unsure, say N.
+
+config TOUCHSCREEN_ELAN_TOUCH
+	tristate "Elan Capacitive touchpad on PVI EPD"
+	help
+	  If you say yes here you get support for Elan Capacitive touchpad on PVI EPD controller chip.
+	 
+	  This driver can also be built as a module.  If so, the module
+	  will be called elan_touch.
+
+config TOUCHSCREEN_WACOM_I2C
+	tristate "Wacom i2c penabled i2c touchscreen"
+	help
+	  Say Y here if you have an Wacom i2c penabled serial touchscreen
+	  connected to your system.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called wacom_i2c.
+
+config TOUCHSCREEN_WALTOP_I2C
+	tristate "Waltop i2c penabled i2c touchscreen"
+	help
+	  Say Y here if you have an Waltop i2c penabled serial touchscreen
+	  connected to your system.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called waltop_i2c.
+
 endif
+

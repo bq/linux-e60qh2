@@ -70,6 +70,25 @@ static void usb_charger_work(struct work_struct *data)
 
 	mutex_lock(&charger->lock);
 
+#ifdef CONFIG_BATTERY_RICOH619
+	{
+		#include <linux/power/ricoh619_battery.h>
+		extern int ricoh619_charger_detect(void);
+		int dcd_result;
+
+		dcd_result = ricoh619_charger_detect ();
+//		printk ("[%s-%d] DCD result 0x%X \n", __func__, __LINE__, dcd_result);
+		if (NO_CHARGER_PLUGGED == dcd_result) {		// retry if DCD reply no charger plugged
+			msleep (100);
+			dcd_result = ricoh619_charger_detect ();
+//			printk ("[%s-%d] DCD result 0x%X \n", __func__, __LINE__, dcd_result);
+		}
+		if (SDP_CHARGER != dcd_result)
+			msleep (500);
+	}
+	if (charger->dp_pullup)
+		charger->dp_pullup(true);
+#else
 	/* Start the primary charger detection. */
 	if (charger->detect) {
 		ret = charger->detect(charger);
@@ -96,7 +115,7 @@ static void usb_charger_work(struct work_struct *data)
 	}
 
 	power_supply_changed(&charger->psy);
-
+#endif
 	mutex_unlock(&charger->lock);
 }
 

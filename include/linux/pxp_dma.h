@@ -80,6 +80,7 @@ typedef unsigned char bool;
 #define PXP_LUT_INVERT			0x1
 #define PXP_LUT_BLACK_WHITE		0x2
 #define PXP_LUT_USE_CMAP		0x4
+#define PXP_LUT_AA				0x8
 
 #define NR_PXP_VIRT_CHANNEL	16
 
