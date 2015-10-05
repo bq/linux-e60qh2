@@ -36,7 +36,6 @@
 #include <linux/mfd/ricoh619.h>
 #include <linux/rtc/rtc-ricoh619.h>
 
-
 struct sleep_control_data {
 	u8 reg_add;
 };
@@ -835,8 +834,8 @@ static void __devinit ricoh61x_noe_init(struct ricoh61x *ricoh)
 {
 	struct i2c_client *client = ricoh->client;
 
-	/* N_OE timer setting to 128mS */
-	__ricoh61x_write(client, RICOH61x_PWR_NOE_TIMSET, 0x0);
+	__ricoh61x_write(client, RICOH61x_PWR_NOE_TIMSET, 0x8); // disable N_OE
+
 	/* power on/off timer setting to on 1s, off 8S */
 	__ricoh61x_write(client, RICOH61x_PWR_ON_TIMSET, 0x5B);
 #if 0 	// do not set repeat power on bit to enable force power off by long press power key function.
