@@ -67,7 +67,7 @@
 #define AVOID_REAGL_DIRTY_TEMP	1
 //#define DO_NOT_POWEROFF				1
 #define NTX_AUTOMODE_PATCH		1
-#define NTX_WFM_MODE_OPTIMIZED 1
+//#define NTX_WFM_MODE_OPTIMIZED 1
 //#define NTX_WFM_MODE_OPTIMIZED_REAGL	1
 #if defined(CONFIG_ANDROID)//[
 	//#define NO_AUTO_REAGL_MODE		1
@@ -76,7 +76,11 @@
 	#define NO_AUTO_REAGL_MODE		1
 	//#define NO_CUS_REAGL_MODE		1
 #endif//] CONFIG_ANDROID
+
+#define MX50_IOCTL_IF	1
+
 #include "eink_processing2.h"
+
 
 /*******************************************
  * AA/AA-D testing
