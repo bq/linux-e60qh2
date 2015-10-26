@@ -3690,6 +3690,10 @@ static void __init mx6_ntx_init(void)
 		// 1440x1080
 		zforce_ts_data.x_max = 1080;
 		zforce_ts_data.y_max = 1440;
+	} else if(5==gptHWCFG->m_val.bDisplayResolution) {
+		// 1448x1072
+		zforce_ts_data.x_max = 1072;
+		zforce_ts_data.y_max = 1448;
 	} else {
 		// 800x600 
 		zforce_ts_data.x_max = 600;
