@@ -107,9 +107,7 @@ int check_wakeup_irqs(void)
 		if (irqd_is_wakeup_set(&desc->irq_data)) {
 			if (desc->istate & IRQS_PENDING) {
 				pr_info("Wakeup IRQ %d %s pending, suspend aborted\n",
-					irq,
-					desc->action && desc->action->name ?
-					desc->action->name : "");
+					irq, desc->name ? desc->name : "");
 				return -EBUSY;
 			}
 			continue;
