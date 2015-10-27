@@ -29,7 +29,7 @@
 #include <linux/init.h>
 #include <linux/i2c.h>
 #include <linux/mfd/ricoh619.h>
-
+#include <linux/delay.h>
 
 enum int_type {
 	SYS_INT  = 0x1,
@@ -335,6 +335,16 @@ static irqreturn_t ricoh61x_irq(int irq, void *data)
 	int ret;
 	int isIrqHandled = 0;
 	unsigned int rtc_int_sts = 0;
+
+	/*
+	 * IRQ is level_low, so if we're actually suspended right now
+	 * simply defer handling the irq, as we'll wake up at some point
+	 * anyway.
+	 */
+	if (ricoh61x->iIsSuspending) {
+		msleep(20);
+		return IRQ_HANDLED;
+	}
 
 	/* printk("PMU: %s: irq=%d\n", __func__, irq); */
 	/* disable_irq_nosync(irq); */
