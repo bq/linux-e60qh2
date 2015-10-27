@@ -539,6 +539,7 @@ int ricoh619_charger_detect(void)
 	}
 	return result;
 }
+EXPORT_SYMBOL(ricoh619_charger_detect);
 
 int ricoh619_restart(void)
 {
