@@ -698,7 +698,7 @@ static void _tps65185_pwrdwn(void)
 
 	gpio_direction_output(GPIO_TPS65185_PWRUP, 0);
 	if( TPS65185_MODE_ACTIVE==dwCurrentMode) {
-		if(3==gptHWCFG->m_val.bUIConfig) {
+		if(1 || 3==gptHWCFG->m_val.bUIConfig) {
 			// MP/RD mode .
 			gdwSafeTick_To_TurnOFF_EP3V3 = jiffies+0;
 		}
@@ -2245,8 +2245,11 @@ int tps65185_suspend(void)
 	dwCurTick=jiffies;
 	if(iIsChkVEE_Stable && time_before(dwCurTick,gdwSafeTick_To_TurnOFF_EP3V3))
 	{
-		WARNING_MSG("waiting for VEE stable ,please retry suspend later !!!\n");
-		iRet = -2;goto error_out;
+//		WARNING_MSG("waiting for VEE stable ,please retry suspend later !!!\n");
+//		iRet = -2;goto error_out;
+		int msec = jiffies_to_msecs(gdwSafeTick_To_TurnOFF_EP3V3 - dwCurTick);
+		WARNING_MSG("waiting for VEE stable for %dms for %lu ticks\n", msec, gdwSafeTick_To_TurnOFF_EP3V3 - dwCurTick);
+		msleep(msec);
 	}
 	else {
 		if(!iIsIRQ_Disabled) {
