@@ -3320,7 +3320,8 @@ void ntx_wacom_reset(bool on) {
 
 int ntx_check_suspend (void)
 {
-	return gpio_get_value(gMX6SL_IR_TOUCH_INT)?0:1;
+	return 0;
+//	return gpio_get_value(gMX6SL_IR_TOUCH_INT)?0:1;
 }
 
 static void ntx_gpio_init(void)
