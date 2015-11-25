@@ -1,0 +1,25 @@
+From 37c2ebea0d93b175646a18c754b0940134800150 Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Fri, 16 Aug 2013 16:09:27 +0200
+Subject: [PATCH 103/200] disable the strange fl-key also in the keylist
+
+---
+ arch/arm/mach-mx6/board-mx6sl_ntx.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/mach-mx6/board-mx6sl_ntx.c b/arch/arm/mach-mx6/board-mx6sl_ntx.c
+index 806e112..cf0f91e 100644
+--- a/arch/arm/mach-mx6/board-mx6sl_ntx.c
++++ b/arch/arm/mach-mx6/board-mx6sl_ntx.c
+@@ -1688,7 +1688,7 @@ static struct platform_device ntx_gpio_key_device = {
+ 
+ 
+ static int mx6sl_ntx_keymap[] = {
+-	KEY(0, 0, 90),
++//	KEY(0, 0, 90),
+ 	KEY(0, 1, KEY_POWER),
+ 	KEY(0, 2, KEY_H),
+ 	KEY(0, 3, KEY_F1),
+-- 
+2.5.3
+

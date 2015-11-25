@@ -1,0 +1,75 @@
+From b1fd336e2ee73717dba37283786a4df95711fd0c Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Wed, 20 Nov 2013 09:46:13 +0100
+Subject: [PATCH 169/200] resume early irqs in dpm_suspend_noirq's error path
+
+---
+ arch/arm/plat-mxc/gpio.c  |  2 --
+ drivers/base/power/main.c | 11 +++++++++--
+ kernel/irq/pm.c           |  6 ++++++
+ 3 files changed, 15 insertions(+), 4 deletions(-)
+
+diff --git a/arch/arm/plat-mxc/gpio.c b/arch/arm/plat-mxc/gpio.c
+index 4e2fb68..e92f0d9 100644
+--- a/arch/arm/plat-mxc/gpio.c
++++ b/arch/arm/plat-mxc/gpio.c
+@@ -76,8 +76,6 @@ static void gpio_mask_irq(struct irq_data *d)
+ {
+ 	u32 gpio = irq_to_gpio(d->irq);
+ if (d->irq == 344) printk("irq-debug: %s\n", __func__);
+-if (d->irq == 344) dump_stack();
+-if (d->irq == 344) return;
+ 	_set_gpio_irqenable(&mxc_gpio_ports[gpio / 32], gpio & 0x1f, 0);
+ if (d->irq == 344) printk("irq-debug: %s done\n", __func__);
+ }
+diff --git a/drivers/base/power/main.c b/drivers/base/power/main.c
+index f1e1a5b..56ebf4f 100644
+--- a/drivers/base/power/main.c
++++ b/drivers/base/power/main.c
+@@ -813,6 +813,7 @@ static int device_suspend_noirq(struct device *dev, pm_message_t state)
+  * Prevent device drivers from receiving interrupts and call the "noirq" suspend
+  * handlers for all non-sysdev devices.
+  */
++extern void recover_early_irqs(void);
+ int dpm_suspend_noirq(pm_message_t state)
+ {
+ 	ktime_t starttime = ktime_get();
+@@ -839,10 +840,16 @@ int dpm_suspend_noirq(pm_message_t state)
+ 		put_device(dev);
+ 	}
+ 	mutex_unlock(&dpm_list_mtx);
+-	if (error)
++	if (error) {
++		/**
++		 * suspend_device_irqs disables all irqs, but
++		 * dpm_resume_noirq only recovers the late irqs.
++		 */
++		recover_early_irqs();
+ 		dpm_resume_noirq(resume_event(state));
+-	else
++	} else {
+ 		dpm_show_time(starttime, state, "late");
++	}
+ 	return error;
+ }
+ EXPORT_SYMBOL_GPL(dpm_suspend_noirq);
+diff --git a/kernel/irq/pm.c b/kernel/irq/pm.c
+index cb228bf..372f885 100644
+--- a/kernel/irq/pm.c
++++ b/kernel/irq/pm.c
+@@ -94,6 +94,12 @@ void resume_device_irqs(void)
+ }
+ EXPORT_SYMBOL_GPL(resume_device_irqs);
+ 
++void recover_early_irqs(void)
++{
++	resume_irqs(true);
++}
++EXPORT_SYMBOL_GPL(recover_early_irqs);
++
+ /**
+  * check_wakeup_irqs - check if any wake-up interrupts are pending
+  */
+-- 
+2.5.3
+

@@ -1,0 +1,69 @@
+From 7d13c0e8cb3efc7b68cd3f517631cd7d9d0bcee9 Mon Sep 17 00:00:00 2001
+From: Jaehoon Chung <jh80.chung@samsung.com>
+Date: Mon, 16 Jan 2012 08:49:01 +0000
+Subject: [PATCH 117/200] mmc: core: add the capability for broken voltage
+
+There is an understood mismatch between the voltage the host controller is
+set to and the voltage supplied to the card by a fixed voltage regulator.
+Teaching the driver to accept the mismatch is overly complicated.  Instead
+just accept the regulator's voltage.
+
+This patch adds MMC_CAP2_BROKEN_VOLTAGE.
+
+If the voltage didn't satisfy between min_uV and max_uV, try to change
+the voltage in core.c.  When changing the voltage, maybe use
+regulator_set_voltage().
+
+In regulator_set_voltage(), check the below condition.
+
+	/* sanity check */
+	if (!rdev->desc->ops->set_voltage &&
+	    !rdev->desc->ops->set_voltage_sel) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+If some board should use the fixed-regulator, always return -EINVAL.
+Then, eMMC didn't initialize always.
+
+So if use a fixed-regulator, we need to add the MMC_CAP2_BROKEN_VOLTAGE.
+
+Signed-off-by: Jaehoon Chung <jh80.chung@samsung.com>
+Signed-off-by: Kyungmin Park <kyungmin.park@samsung.com>
+Acked-by: Adrian Hunter <adrian.hunter@intel.com>
+Signed-off-by: Chris Ball <cjb@laptop.org>
+---
+ drivers/mmc/core/core.c  | 4 ++++
+ include/linux/mmc/host.h | 1 +
+ 2 files changed, 5 insertions(+)
+
+diff --git a/drivers/mmc/core/core.c b/drivers/mmc/core/core.c
+index 5ff34e8..cbbcc4d 100644
+--- a/drivers/mmc/core/core.c
++++ b/drivers/mmc/core/core.c
+@@ -1010,6 +1010,10 @@ int mmc_regulator_set_ocr(struct mmc_host *mmc,
+ 		 * might not allow this operation
+ 		 */
+ 		voltage = regulator_get_voltage(supply);
++
++		if (mmc->caps2 & MMC_CAP2_BROKEN_VOLTAGE)
++			min_uV = max_uV = voltage;
++
+ 		if (voltage < 0)
+ 			result = voltage;
+ 		else if (voltage < min_uV || voltage > max_uV)
+diff --git a/include/linux/mmc/host.h b/include/linux/mmc/host.h
+index 53fdaf2..94cfc7c 100644
+--- a/include/linux/mmc/host.h
++++ b/include/linux/mmc/host.h
+@@ -234,6 +234,7 @@ struct mmc_host {
+ 	unsigned int		caps2;		/* More host capabilities */
+ 
+ #define MMC_CAP2_BOOTPART_NOACC	(1 << 0)	/* Boot partition no access */
++#define MMC_CAP2_BROKEN_VOLTAGE	(1 << 7)	/* Use the broken voltage */
+ 
+ 	mmc_pm_flag_t		pm_caps;	/* supported pm features */
+ 
+-- 
+2.5.3
+

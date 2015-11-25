@@ -1,0 +1,30 @@
+From 5aa130f454fd5148786005cac2ae9e8e0b2ad515 Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Wed, 24 Jul 2013 16:48:08 +0200
+Subject: [PATCH 086/200] disable some vt config options that seem to hinder
+ basic suspend
+
+With these options enabled the suspend when started from the application
+hangs in the pm_prepare_console state.
+---
+ .config | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/.config b/.config
+index 5529f02..02311b2 100644
+--- a/.config
++++ b/.config
+@@ -918,8 +918,8 @@ CONFIG_SERIO_LIBPS2=y
+ # Character devices
+ #
+ CONFIG_VT=y
+-CONFIG_CONSOLE_TRANSLATIONS=y
+-CONFIG_VT_CONSOLE=y
++# CONFIG_CONSOLE_TRANSLATIONS is not set
++# CONFIG_VT_CONSOLE is not set
+ CONFIG_HW_CONSOLE=y
+ # CONFIG_VT_HW_CONSOLE_BINDING is not set
+ CONFIG_UNIX98_PTYS=y
+-- 
+2.5.3
+

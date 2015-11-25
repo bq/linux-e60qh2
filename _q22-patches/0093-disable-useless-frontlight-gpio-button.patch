@@ -1,0 +1,30 @@
+From 36d56593cb6540f9317c38f9bea6eb99b5bb0c4b Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Thu, 1 Aug 2013 15:27:20 +0200
+Subject: [PATCH 093/200] disable useless frontlight gpio button
+
+---
+ arch/arm/mach-mx6/board-mx6sl_ntx.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm/mach-mx6/board-mx6sl_ntx.c b/arch/arm/mach-mx6/board-mx6sl_ntx.c
+index b5d8644..a91323f 100644
+--- a/arch/arm/mach-mx6/board-mx6sl_ntx.c
++++ b/arch/arm/mach-mx6/board-mx6sl_ntx.c
+@@ -1658,11 +1658,11 @@ static struct platform_device lcd_wvga_device = {
+ }
+ 
+ static struct gpio_keys_button gpio_key_matrix_FL[] = {
+-	GPIO_BUTTON(GPIO_KB_ROW0, 90, 1, "front_light", 1),			// Front light
++//	GPIO_BUTTON(GPIO_KB_ROW0, 90, 1, "front_light", 1),			// Front light
+ };
+ 
+ static struct gpio_keys_button gpio_key_HOME_FL[] = {
+-	GPIO_BUTTON(GPIO_KB_COL1, 90, 1, "front_light", 1),			// Front light
++//	GPIO_BUTTON(GPIO_KB_COL1, 90, 1, "front_light", 1),			// Front light
+ 	GPIO_BUTTON(GPIO_KB_COL0, 61, 1, "home", 1),			// home
+ };
+ 
+-- 
+2.5.3
+

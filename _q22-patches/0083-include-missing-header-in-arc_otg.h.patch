@@ -1,0 +1,25 @@
+From f291944cafc4da0342d054e6e7a2a9471a31ff8a Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Fri, 19 Jul 2013 17:41:00 +0200
+Subject: [PATCH 083/200] include missing header in arc_otg.h
+
+---
+ arch/arm/plat-mxc/include/mach/arc_otg.h | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/arch/arm/plat-mxc/include/mach/arc_otg.h b/arch/arm/plat-mxc/include/mach/arc_otg.h
+index f2bb01c..990d670 100755
+--- a/arch/arm/plat-mxc/include/mach/arc_otg.h
++++ b/arch/arm/plat-mxc/include/mach/arc_otg.h
+@@ -19,6 +19,8 @@
+ #ifndef __ASM_ARCH_MXC_ARC_OTG_H__
+ #define __ASM_ARCH_MXC_ARC_OTG_H__
+ 
++#include <linux/usb/fsl_xcvr.h>
++
+ #ifdef CONFIG_ARCH_MX3
+ extern volatile u32 *mx3_usb_otg_addr;
+ #define OTG_BASE_ADDR		mx3_usb_otg_addr
+-- 
+2.5.3
+

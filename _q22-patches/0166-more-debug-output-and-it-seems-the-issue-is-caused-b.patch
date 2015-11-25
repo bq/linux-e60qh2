@@ -1,0 +1,102 @@
+From cca072c4e36a0ab645f8c311fdd7db43e8c02348 Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Mon, 18 Nov 2013 17:10:49 +0100
+Subject: [PATCH 166/200] more debug output and it seems the issue is caused by
+ some sort of race condition
+
+With these debug messages active the issue seems to happen less frequent
+---
+ arch/arm/plat-mxc/gpio.c | 9 +++++++++
+ kernel/irq/chip.c        | 2 +-
+ kernel/irq/handle.c      | 9 +++++++++
+ 3 files changed, 19 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm/plat-mxc/gpio.c b/arch/arm/plat-mxc/gpio.c
+index fb562c8..4e2fb68 100644
+--- a/arch/arm/plat-mxc/gpio.c
++++ b/arch/arm/plat-mxc/gpio.c
+@@ -76,6 +76,8 @@ static void gpio_mask_irq(struct irq_data *d)
+ {
+ 	u32 gpio = irq_to_gpio(d->irq);
+ if (d->irq == 344) printk("irq-debug: %s\n", __func__);
++if (d->irq == 344) dump_stack();
++if (d->irq == 344) return;
+ 	_set_gpio_irqenable(&mxc_gpio_ports[gpio / 32], gpio & 0x1f, 0);
+ if (d->irq == 344) printk("irq-debug: %s done\n", __func__);
+ }
+@@ -90,6 +92,8 @@ if (d->irq == 344) printk("irq-debug: %s done\n", __func__);
+ 
+ static int mxc_gpio_get(struct gpio_chip *chip, unsigned offset);
+ 
++static int home_is_set;
++
+ static int gpio_set_irq_type(struct irq_data *d, u32 type)
+ {
+ 	u32 gpio = irq_to_gpio(d->irq);
+@@ -128,11 +132,16 @@ if (d->irq == 344) printk("irq-debug: %s\n", __func__);
+ 		return -EINVAL;
+ 	}
+ 
++//if (d->irq != 344) {
+ 	/* set the correct irq handler */
+ 	if (type & (IRQ_TYPE_LEVEL_LOW | IRQ_TYPE_LEVEL_HIGH))
+ 		irq_set_handler(d->irq, handle_level_irq);
+ 	else if (type & IRQ_TYPE_EDGE_BOTH)
+ 		irq_set_handler(d->irq, handle_edge_irq);
++/*} else if (!home_is_set) {
++	irq_set_handler(d->irq, handle_edge_irq);
++	home_is_set = 1;
++}*/
+ 
+ 	reg += GPIO_ICR1 + ((gpio & 0x10) >> 2); /* lower or upper register */
+ 	bit = gpio & 0xf;
+diff --git a/kernel/irq/chip.c b/kernel/irq/chip.c
+index 21564f9..c061ece 100644
+--- a/kernel/irq/chip.c
++++ b/kernel/irq/chip.c
+@@ -345,7 +345,6 @@ static void cond_unmask_irq(struct irq_desc *desc)
+ void
+ handle_level_irq(unsigned int irq, struct irq_desc *desc)
+ {
+-if(irq == 344) printk("home in %s\n", __func__);
+ 	raw_spin_lock(&desc->lock);
+ 	mask_ack_irq(desc);
+ 
+@@ -461,6 +460,7 @@ handle_edge_irq(unsigned int irq, struct irq_desc *desc)
+ 	 * we shouldn't process the IRQ. Mark it pending, handle
+ 	 * the necessary masking and go out
+ 	 */
++if (irq == 344) printk("disabled %d, in_progress %d, desc-action %d\n", irqd_irq_disabled(&desc->irq_data), irqd_irq_inprogress(&desc->irq_data), !!desc->action);
+ 	if (unlikely(irqd_irq_disabled(&desc->irq_data) ||
+ 		     irqd_irq_inprogress(&desc->irq_data) || !desc->action)) {
+ 		if (!irq_check_poll(desc)) {
+diff --git a/kernel/irq/handle.c b/kernel/irq/handle.c
+index 470d08c..a0b58d0 100644
+--- a/kernel/irq/handle.c
++++ b/kernel/irq/handle.c
+@@ -169,13 +169,22 @@ irqreturn_t handle_irq_event(struct irq_desc *desc)
+ 	struct irqaction *action = desc->action;
+ 	irqreturn_t ret;
+ 
++if(desc->irq_data.irq == 344) printk("%s", __func__);
+ 	desc->istate &= ~IRQS_PENDING;
+ 	irqd_set(&desc->irq_data, IRQD_IRQ_INPROGRESS);
+ 	raw_spin_unlock(&desc->lock);
+ 
+ 	ret = handle_irq_event_percpu(desc, action);
+ 
++if (desc->irq_data.irq == 344) printk("%s before lock", __func__);
++/*if (desc->irq_data.irq == 344 && raw_spin_is_locked(&desc->lock)) {
++	printk("!!! home-key irq-lock is already locked...\n");
++	irqd_clear(&desc->irq_data, IRQD_IRQ_INPROGRESS);
++	return ret;
++}*/
++
+ 	raw_spin_lock(&desc->lock);
+ 	irqd_clear(&desc->irq_data, IRQD_IRQ_INPROGRESS);
++if(desc->irq_data.irq == 344) printk("... done\n");
+ 	return ret;
+ }
+-- 
+2.5.3
+

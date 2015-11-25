@@ -1,0 +1,25 @@
+From e0eaa2a7e976c1e079556897b09f3d078b420d6e Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Fri, 8 Nov 2013 10:52:42 +0100
+Subject: [PATCH 150/200] add a debug line for reported gpio keys
+
+---
+ drivers/input/keyboard/gpio_keys.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/input/keyboard/gpio_keys.c b/drivers/input/keyboard/gpio_keys.c
+index e9c90a3..c766620 100644
+--- a/drivers/input/keyboard/gpio_keys.c
++++ b/drivers/input/keyboard/gpio_keys.c
+@@ -325,6 +325,8 @@ static void gpio_keys_report_event(struct gpio_button_data *bdata)
+ 	unsigned int type = button->type ?: EV_KEY;
+ 	int state = (gpio_get_value_cansleep(button->gpio) ? 1 : 0) ^ button->active_low;
+ 
++printk("%s: code: %d, type %d, state %d, isr_state %d\n", __func__, button->code, type, state, bdata->isr_state);
++
+ 	if (state != bdata->isr_state)	// do nothing if key bounced.
+ 		return;
+ 		
+-- 
+2.5.3
+

@@ -1,0 +1,41 @@
+From 04608c17bbde2af4dc05152a8e100d19b57fc357 Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Mon, 16 Dec 2013 16:02:13 +0100
+Subject: [PATCH 191/200] limit our disabling of ntx's powersafe gpio setting
+ to the affected gpio register
+
+---
+ arch/arm/mach-mx6/mx6sl_ntx_io.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/arch/arm/mach-mx6/mx6sl_ntx_io.c b/arch/arm/mach-mx6/mx6sl_ntx_io.c
+index 13a5f5c..e39e499 100644
+--- a/arch/arm/mach-mx6/mx6sl_ntx_io.c
++++ b/arch/arm/mach-mx6/mx6sl_ntx_io.c
+@@ -1686,19 +1686,19 @@ void ntx_gpio_suspend (void)
+ 
+ 		base = IO_ADDRESS(GPIO1_BASE_ADDR);
+ 		ntx_gpio_dir[0] = __raw_readl(base+4);
+-//		__raw_writel( ntx_gpio_dir[0]&(~0xffffff80), base+4);
++		__raw_writel( ntx_gpio_dir[0]&(~0xffffff80), base+4);
+ 
+         base = IO_ADDRESS(GPIO2_BASE_ADDR);
+         ntx_gpio_dir[1] = __raw_readl(base+4);
+-//        __raw_writel( ntx_gpio_dir[1]&(~0xffffffff), base+4);
++        __raw_writel( ntx_gpio_dir[1]&(~0xffffffff), base+4);
+ 
+         base = IO_ADDRESS(GPIO3_BASE_ADDR);
+         ntx_gpio_dir[2] = __raw_readl(base+4);
+-//        __raw_writel( ntx_gpio_dir[2]&(~0xfffcffff), base+4);
++        __raw_writel( ntx_gpio_dir[2]&(~0xfffcffff), base+4);
+ 
+         base = IO_ADDRESS(GPIO4_BASE_ADDR);
+         ntx_gpio_dir[3] = __raw_readl(base+4);
+-//        __raw_writel( ntx_gpio_dir[3]&(~0xdfffffff), base+4);
++        __raw_writel( ntx_gpio_dir[3]&(~0xdfffffff), base+4);
+ 
+         base = IO_ADDRESS(GPIO5_BASE_ADDR);
+         ntx_gpio_dir[4] = __raw_readl(base+4);
+-- 
+2.5.3
+

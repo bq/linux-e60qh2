@@ -1,0 +1,56 @@
+From c3c13dde24e3a7976b5659e1c996c608e82b357b Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Thu, 21 Nov 2013 17:53:06 +0100
+Subject: [PATCH 174/200] provide a real "solution" for the double
+ keypress-events on resume
+
+Explaination inline in the code.
+---
+ drivers/input/input.c              | 14 ++++++++++++++
+ drivers/input/keyboard/gpio_keys.c |  4 ++--
+ 2 files changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/input/input.c b/drivers/input/input.c
+index c330a14..ad0d273 100644
+--- a/drivers/input/input.c
++++ b/drivers/input/input.c
+@@ -599,6 +599,20 @@ static void input_dev_release_keys(struct input_dev *dev)
+ 
+ 	if (is_event_supported(EV_KEY, dev->evbit, EV_MAX)) {
+ 		for (code = 0; code <= KEY_MAX; code++) {
++/*
++ * It seems the input-device resumes independently of the real device
++ * providing the data (i.e. gpio-keys). In this case it can happen, that
++ * gpio-keys is already awake and handling the press of the key, before
++ * input_dev_resume runs and invokes input_dev_release_keys.
++ * This then leads to a bouncing key, because resume reports the pressed
++ * key, this function then reports the key as released and the real
++ * interrupt handler of gpio-keys reports the key again as pressed.
++ * As no real solution seems to be easily available, simply block the release
++ * for the home-key here.
++ */
++if (code == 61 || code == 116)
++	continue;
++
+ 			if (is_event_supported(code, dev->keybit, KEY_MAX) &&
+ 			    __test_and_clear_bit(code, dev->key)) {
+ 				input_pass_event(dev, EV_KEY, code, 0);
+diff --git a/drivers/input/keyboard/gpio_keys.c b/drivers/input/keyboard/gpio_keys.c
+index 484100a..d81fded 100644
+--- a/drivers/input/keyboard/gpio_keys.c
++++ b/drivers/input/keyboard/gpio_keys.c
+@@ -642,9 +642,9 @@ static int gpio_keys_resume(struct device *dev)
+ 			disable_irq_wake(irq);
+ 		}
+ 
+-//		gpio_keys_report_event(&ddata->data[i]);
++		gpio_keys_report_event(&ddata->data[i]);
+ 	}
+-//	input_sync(ddata->input);
++	input_sync(ddata->input);
+ 
+ 	return 0;
+ }
+-- 
+2.5.3
+

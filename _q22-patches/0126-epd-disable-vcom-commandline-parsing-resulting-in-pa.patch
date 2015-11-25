@@ -1,0 +1,42 @@
+From 6e707682222e369162b40c921526d9b655f277b2 Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Thu, 3 Oct 2013 12:48:50 +0200
+Subject: [PATCH 126/200] epd: disable vcom commandline parsing, resulting in
+ page faults
+
+---
+ drivers/video/mxc/fake_s1d13522.c | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/video/mxc/fake_s1d13522.c b/drivers/video/mxc/fake_s1d13522.c
+index af983d1..b741b36 100644
+--- a/drivers/video/mxc/fake_s1d13522.c
++++ b/drivers/video/mxc/fake_s1d13522.c
+@@ -151,7 +151,7 @@ volatile unsigned long gdwWF_size;
+ 
+ volatile int giRootDevNum=0;
+ volatile int giRootPartNum=1;
+-volatile long glVCOM_uV;
++volatile long glVCOM_uV = 0;
+ 
+ 
+ 
+@@ -321,9 +321,13 @@ void fake_s1d13522_parse_epd_cmdline(void)
+ 	char *pcPatternStart,*pcPatternVal,*pcPatternValEnd,cTempStore='\0';
+ 	unsigned long ulPatternLen;
+ 
+-	char *szParsePatternA[]={"vcom=","waveform_sz=","waveform_p=","logo_sz=","logo_p=","root="};
++//	char *szParsePatternA[]={"vcom=","waveform_sz=","waveform_p=","logo_sz=","logo_p=","root="};
++//	int ((*pfnDispatchA[])(char *str))={ \
++//		vcom_uV_setup,waveform_size_setup,waveform_p_setup,\
++//		logo_size_setup,logo_p_setup,root_path_setup };
++	char *szParsePatternA[]={"waveform_sz=","waveform_p=","logo_sz=","logo_p=","root="};
+ 	int ((*pfnDispatchA[])(char *str))={ \
+-		vcom_uV_setup,waveform_size_setup,waveform_p_setup,\
++		waveform_size_setup,waveform_p_setup,\
+ 		logo_size_setup,logo_p_setup,root_path_setup };
+ 		
+ 	int i;
+-- 
+2.5.3
+

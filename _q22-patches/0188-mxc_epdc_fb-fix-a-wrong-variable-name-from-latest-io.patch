@@ -1,0 +1,26 @@
+From 31e272279720e66250eb0c0846831258717597bb Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Fri, 13 Dec 2013 18:31:58 +0100
+Subject: [PATCH 188/200] mxc_epdc_fb: fix a wrong variable name from latest
+ ioctl reworks
+
+---
+ drivers/video/mxc/mxc_epdc_fb.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/video/mxc/mxc_epdc_fb.c b/drivers/video/mxc/mxc_epdc_fb.c
+index 9da7e3a..c3ed935 100644
+--- a/drivers/video/mxc/mxc_epdc_fb.c
++++ b/drivers/video/mxc/mxc_epdc_fb.c
+@@ -3812,7 +3812,7 @@ static int mxc_epdc_fb_ioctl(struct fb_info *info, unsigned int cmd,
+ 				sizeof(upd_data))) {
+ 
+ 				// set upd_data <- upd_data_old
+-				memcpy(&upd_data_new.update_region, &upd_data_old.update_region, sizeof(upd_data_old.update_region));
++				memcpy(&upd_data.update_region, &upd_data_old.update_region, sizeof(upd_data_old.update_region));
+ 				upd_data.waveform_mode = upd_data_old.waveform_mode;
+ 				upd_data.update_mode = upd_data_old.update_mode;
+ 				upd_data.update_marker = upd_data_old.update_marker;
+-- 
+2.5.3
+

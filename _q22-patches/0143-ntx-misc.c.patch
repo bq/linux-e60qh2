@@ -1,0 +1,49 @@
+From 49de77bc66a896a4e8861e170f2d97272eea91a9 Mon Sep 17 00:00:00 2001
+From: Matthias Brugger <matthias.brugger@bqreaders.com>
+Date: Wed, 30 Oct 2013 16:07:16 +0100
+Subject: [PATCH 143/200] ntx-misc.c
+
+Dispatch i2c command to i2c core first and start evaluation of the
+return value afterwards.
+---
+ drivers/misc/ntx-misc.c | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/misc/ntx-misc.c b/drivers/misc/ntx-misc.c
+index d55920c..1b61625 100644
+--- a/drivers/misc/ntx-misc.c
++++ b/drivers/misc/ntx-misc.c
+@@ -63,11 +63,12 @@ int up_read_reg(unsigned char reg)
+ 		{.addr = g_up_i2c_client->addr, .flags = I2C_M_RD, .len = 2, .buf = buffer,},
+ 	};
+ 
+-	do {
+-		ret = i2c_transfer(g_up_i2c_client->adapter, msg, 2);
++	ret = i2c_transfer(g_up_i2c_client->adapter, msg, 2);
++	while (ret == -EBUSY && retry < MAX_I2C_RETRY) {
+ 		msleep(10);
+ 		retry++;
+-	} while (ret == -EBUSY && retry < MAX_I2C_RETRY);
++		ret = i2c_transfer(g_up_i2c_client->adapter, msg, 2);
++	}
+ 
+ 	if(0 > ret)
+ 		printk ("[%s-%d] i2c_transfer failed...\n", __func__, __LINE__);
+@@ -87,11 +88,12 @@ int up_write_reg(unsigned char reg, int value)
+ 	buffer[1] = value >> 8;
+ 	buffer[2] = value & 0xFF;
+ 
+-	do {
++	ret = i2c_transfer(g_up_i2c_client->adapter, msg, 1);
++	while (ret == -EBUSY && retry < MAX_I2C_RETRY) {
+ 		ret = i2c_transfer(g_up_i2c_client->adapter, msg, 1);
+ 		msleep(10);
+ 		retry++;
+-	} while (ret == -EBUSY && retry < MAX_I2C_RETRY);
++	}
+ 
+ 	if(ret < 0)
+ 		printk ("[%s-%d] i2c_transfer failed...\n", __func__, __LINE__);
+-- 
+2.5.3
+

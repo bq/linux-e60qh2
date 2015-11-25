@@ -1,0 +1,96 @@
+From 75602292c61d78d98840e5a9b2a3dc73eae3679a Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Tue, 13 Aug 2013 18:01:51 +0200
+Subject: [PATCH 101/200] fixes for latest import
+
+---
+ .config                          | 9 +++++++--
+ arch/arm/mach-mx6/mx6sl_ntx_io.c | 1 -
+ drivers/video/mxc/mxc_epdc_fb.c  | 5 +++--
+ 3 files changed, 10 insertions(+), 5 deletions(-)
+
+diff --git a/.config b/.config
+index aba940d..8a8f81b 100644
+--- a/.config
++++ b/.config
+@@ -322,12 +322,15 @@ CONFIG_MACH_MX6SL_NTX=y
+ # CONFIG_MACH_MX6Q_SABRELITE is not set
+ CONFIG_MACH_MX6Q_SABRESD=y
+ # CONFIG_MACH_MX6Q_SABREAUTO is not set
++# CONFIG_MACH_MX6Q_HDMIDONGLE is not set
+ 
+ #
+ # MX6 Options:
+ #
+ # CONFIG_IMX_PCIE is not set
+-# CONFIG_MX6_INTER_LDO_BYPASS is not set
++CONFIG_USB_FSL_ARC_OTG=y
++CONFIG_USB_ID_WAKEUP_ENABLE=y
++CONFIG_MX6_INTER_LDO_BYPASS=y
+ CONFIG_ISP1504_MXC=y
+ # CONFIG_MXC_IRQ_PRIOR is not set
+ CONFIG_MXC_PWM=y
+@@ -392,7 +395,7 @@ CONFIG_ARM_GIC=y
+ #
+ CONFIG_ARM_AMBA=y
+ # CONFIG_PCI_SYSCALL is not set
+-# CONFIG_ARCH_SUPPORTS_MSI is not set
++CONFIG_ARCH_SUPPORTS_MSI=y
+ # CONFIG_PCCARD is not set
+ # CONFIG_PL310_ERRATA_769419 is not set
+ 
+@@ -876,6 +879,7 @@ CONFIG_INPUT_TOUCHSCREEN=y
+ # CONFIG_TOUCHSCREEN_TOUCHRIGHT is not set
+ # CONFIG_TOUCHSCREEN_TOUCHWIN is not set
+ # CONFIG_TOUCHSCREEN_USB_COMPOSITE is not set
++# CONFIG_TOUCHSCREEN_NOVATEK is not set
+ # CONFIG_TOUCHSCREEN_TOUCHIT213 is not set
+ # CONFIG_TOUCHSCREEN_TSC2005 is not set
+ # CONFIG_TOUCHSCREEN_TSC2007 is not set
+@@ -2139,6 +2143,7 @@ CONFIG_CRYPTO_LZO=y
+ # CONFIG_CRYPTO_USER_API_SKCIPHER is not set
+ CONFIG_CRYPTO_HW=y
+ # CONFIG_CRYPTO_DEV_FSL_CAAM is not set
++# CONFIG_CRYPTO_DEV_FSL_CAAM_SM is not set
+ CONFIG_CRYPTO_DEV_DCP=y
+ # CONFIG_BINARY_PRINTF is not set
+ 
+diff --git a/arch/arm/mach-mx6/mx6sl_ntx_io.c b/arch/arm/mach-mx6/mx6sl_ntx_io.c
+index ffd2db8..9c4fb1a 100644
+--- a/arch/arm/mach-mx6/mx6sl_ntx_io.c
++++ b/arch/arm/mach-mx6/mx6sl_ntx_io.c
+@@ -1366,7 +1366,6 @@ void ntx_gpio_resume (void)
+ //		gpio_direction_input (gMX6SL_IR_TOUCH_INT);
+ //		mdelay (20);
+ //		gpio_direction_output (gMX6SL_IR_TOUCH_RST, 1);
+-	}
+ 	
+ 		gpio_free(IMX_GPIO_NR(3, 14));
+ 		gpio_free(IMX_GPIO_NR(3, 15));
+diff --git a/drivers/video/mxc/mxc_epdc_fb.c b/drivers/video/mxc/mxc_epdc_fb.c
+index 24cd64f..7e21e3c 100644
+--- a/drivers/video/mxc/mxc_epdc_fb.c
++++ b/drivers/video/mxc/mxc_epdc_fb.c
+@@ -63,8 +63,9 @@
+ #include <linux/gallen_dbg.h>
+ 
+ //#define DO_NOT_POWEROFF				1
+-#define NTX_WFM_MODE_OPTIMIZED 1
++//#define NTX_WFM_MODE_OPTIMIZED 1
+ 
++#define MX50_IOCTL_IF	1
+ 
+ /*
+  * Enable this define to have a default panel
+@@ -6160,7 +6161,7 @@ static int mxc_epdc_fb_resume(struct platform_device *pdev)
+ 	mxc_epdc_fb_blank(FB_BLANK_UNBLANK, &data->info);
+ #endif//] EPD_SUSPEND_BLANK
+ 
+-	//epdc_init_settings(data);
++	epdc_init_settings(data);
+ 	
+ 	data->updates_active = false;
+ 
+-- 
+2.5.3
+

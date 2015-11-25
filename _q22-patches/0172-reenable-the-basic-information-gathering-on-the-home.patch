@@ -1,0 +1,43 @@
+From 9774e338e01225d47ef5c0c7dadf6dddaffd9404 Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Wed, 20 Nov 2013 15:34:59 +0100
+Subject: [PATCH 172/200] reenable the basic information gathering on the
+ homekey-interrupt
+
+---
+ kernel/irq/chip.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/kernel/irq/chip.c b/kernel/irq/chip.c
+index 990965e..b67cfc5 100644
+--- a/kernel/irq/chip.c
++++ b/kernel/irq/chip.c
+@@ -138,11 +138,13 @@ EXPORT_SYMBOL_GPL(irq_get_irq_data);
+ 
+ static void irq_state_clr_disabled(struct irq_desc *desc)
+ {
++if (desc->irq_data.irq == 344) dump_stack();
+ 	irqd_clear(&desc->irq_data, IRQD_IRQ_DISABLED);
+ }
+ 
+ static void irq_state_set_disabled(struct irq_desc *desc)
+ {
++if (desc->irq_data.irq == 344) dump_stack();
+ 	irqd_set(&desc->irq_data, IRQD_IRQ_DISABLED);
+ }
+ 
+@@ -460,9 +462,11 @@ handle_edge_irq(unsigned int irq, struct irq_desc *desc)
+ 	 * we shouldn't process the IRQ. Mark it pending, handle
+ 	 * the necessary masking and go out
+ 	 */
++if (irq == 344) printk("disabled %d, in_progress %d, desc-action %d\n", irqd_irq_disabled(&desc->irq_data), irqd_irq_inprogress(&desc->irq_data), !!desc->action);
+ 	if (unlikely(irqd_irq_disabled(&desc->irq_data) ||
+ 		     irqd_irq_inprogress(&desc->irq_data) || !desc->action)) {
+ 		if (!irq_check_poll(desc)) {
++if (irq != 344) // only set other irqs pending, due to the race of the homebutton irq
+ 			desc->istate |= IRQS_PENDING;
+ 			mask_ack_irq(desc);
+ 			goto out_unlock;
+-- 
+2.5.3
+

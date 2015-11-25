@@ -1,0 +1,72 @@
+From e9f15a4d4022f6138a3662a62779233348d79cc5 Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Fri, 6 Sep 2013 14:39:07 +0200
+Subject: [PATCH 110/200] add FRONT_LIGHT_SLEEP ioctl
+
+---
+ arch/arm/mach-mx6/mx6sl_ntx_io.c | 35 +++++++++++++++++++++++++++++++++++
+ 1 file changed, 35 insertions(+)
+
+diff --git a/arch/arm/mach-mx6/mx6sl_ntx_io.c b/arch/arm/mach-mx6/mx6sl_ntx_io.c
+index 0f5795d..c8094f2 100644
+--- a/arch/arm/mach-mx6/mx6sl_ntx_io.c
++++ b/arch/arm/mach-mx6/mx6sl_ntx_io.c
+@@ -114,6 +114,7 @@
+ #define CM_FRONT_LIGHT_AVAILABLE	242
+ #define CM_FRONT_LIGHT_DUTY		243
+ #define CM_FRONT_LIGHT_FREQUENCY	244
++#define CM_FRONT_LIGHT_SLEEP		245
+ 
+ #define CM_POWER_KEY_RAW		250
+ 
+@@ -478,6 +479,7 @@ static int  ioctlDriver(struct file *filp, unsigned int command, unsigned long a
+ 	static unsigned int  last_FL_duty = 0;
+ 	static unsigned int  current_FL_freq = 0xFFFF;
+   struct ebook_device_info info;  
++	int ret;
+   	
+ 	if(!Driver_Count){
+ 		printk("pvi_io : do not open\n");
+@@ -839,6 +841,39 @@ static int  ioctlDriver(struct file *filp, unsigned int command, unsigned long a
+ 			}
+ 			break;
+ 
++		case CM_FRONT_LIGHT_SLEEP:
++printk("front light sleep %d\n", p);
++			if(0!=gptHWCFG->m_val.bFrontLight)
++			{
++				if (p) {
++					if(delayed_work_pending(&FL_off)){
++						cancel_delayed_work_sync(&FL_off);
++					}
++					if (0 == last_FL_duty){
++						ret = up_write_reg (0xA1, 0xFF00);
++						if (ret < 0)
++							return -EINVAL;
++						ret = up_write_reg (0xA2, 0xFF00);
++						if (ret < 0)
++							return -EINVAL;
++						ret = up_write_reg (0xA3, 0x0100);
++						if (ret < 0)
++							return -EINVAL;
++
++						msleep(100);
++						gpio_direction_output(MX6SL_FL_EN,0);
++					}
++				}
++				else if(last_FL_duty != 0){
++					ret = up_write_reg(0xA3, 0); 
++					if (ret < 0)
++						return -EINVAL;
++					schedule_delayed_work(&FL_off, 120);
++				}
++				last_FL_duty = p;
++			}
++			break;
++
+ 		case CM_FRONT_LIGHT_AVAILABLE:
+ 			{
+       	i = (unsigned long) (gptHWCFG->m_val.bFrontLight?1:0) ;
+-- 
+2.5.3
+

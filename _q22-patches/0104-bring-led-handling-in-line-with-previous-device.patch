@@ -1,0 +1,46 @@
+From 20094025bf87158d05cdb6f2091fd629dadcf4fd Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Tue, 20 Aug 2013 12:17:25 +0200
+Subject: [PATCH 104/200] bring led handling in line with previous device
+
+- disable resuming of led blink threads
+- fix the calling convention for the led ioctl
+  The parameter format seems to have gotten the inverse compared
+  to the imx5 kernel
+---
+ arch/arm/mach-mx6/mx6sl_ntx_io.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/arch/arm/mach-mx6/mx6sl_ntx_io.c b/arch/arm/mach-mx6/mx6sl_ntx_io.c
+index 9c4fb1a..569c9f5 100644
+--- a/arch/arm/mach-mx6/mx6sl_ntx_io.c
++++ b/arch/arm/mach-mx6/mx6sl_ntx_io.c
+@@ -579,7 +579,7 @@ static int  ioctlDriver(struct file *filp, unsigned int command, unsigned long a
+ 			break;
+ 		case CM_nLED:
+ 			//printk("CM_nLED %d\n",p);
+-			if (p)
++			if (!p)
+ 				gpio_direction_output (gMX6SL_ON_LED,0);
+ 			else
+ 				gpio_direction_input (gMX6SL_ON_LED);
+@@ -1381,14 +1381,14 @@ void ntx_gpio_resume (void)
+ 	g_power_key_pressed = power_key_status();	// POWER key
+ 	if (g_power_key_pressed) 
+ 		mod_timer(&power_key_timer, jiffies + 1);
+-
++/*
+ 	if (LED_conitnuous)
+    		wake_up_interruptible(&LED_freeze_WaitQueue);
+    	else {
+ 		ntx_led_blink (3, red_led_period);
+ 		ntx_led_blink (4, green_led_period);
+ 		ntx_led_blink (5, blue_led_period);
+-	}
++	}*/
+ }
+ 
+ /*void ntx_gpio_touch_reset (void)
+-- 
+2.5.3
+

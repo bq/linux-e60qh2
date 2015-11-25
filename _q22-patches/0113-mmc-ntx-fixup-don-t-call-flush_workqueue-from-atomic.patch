@@ -1,0 +1,37 @@
+From a0be3ffc70b0795c367a4858437c29b3e40b8874 Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Mon, 30 Sep 2013 15:21:56 +0200
+Subject: [PATCH 113/200] mmc ntx fixup: don't call flush_workqueue from atomic
+ contexts
+
+mmc_schedule_delayed_work also gets called from the carddetect
+irq handler of the esdhc-imx driver and thus from an atomic context.
+
+This can lead to errors "BUG: scheduling while atomic" when inserting
+or removing the sd card.
+---
+ drivers/mmc/core/core.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/mmc/core/core.c b/drivers/mmc/core/core.c
+index 07b7166..4990e61 100644
+--- a/drivers/mmc/core/core.c
++++ b/drivers/mmc/core/core.c
+@@ -71,9 +71,12 @@ MODULE_PARM_DESC(
+ static int mmc_schedule_delayed_work(struct delayed_work *work,
+ 				     unsigned long delay)
+ {
+-	if(cancel_delayed_work(work)==0) {
+-		flush_workqueue(workqueue);
++	/* only call this when not in an atomic context */
++	if (!in_atomic_preempt_off()) {
++		if (cancel_delayed_work(work) == 0)
++			flush_workqueue(workqueue);
+ 	}
++
+ 	return queue_delayed_work(workqueue, work, delay);
+ }
+ 
+-- 
+2.5.3
+

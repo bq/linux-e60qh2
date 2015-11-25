@@ -1,0 +1,59 @@
+From b9402cae55bc4fd344d47eafd20192b885de4e8e Mon Sep 17 00:00:00 2001
+From: Adrian Hunter <adrian.hunter@intel.com>
+Date: Fri, 23 Sep 2011 09:48:21 +0000
+Subject: [PATCH 116/200] mmc: block: support no access to boot partitions
+
+Intel Medfield platform blocks access to eMMC boot partitions which
+results in switch errors.  Since there is no access, mmcboot0/1
+devices should not be created.  Add a host capability to reflect that.
+
+Signed-off-by: Adrian Hunter <adrian.hunter@intel.com>
+Signed-off-by: Chris Ball <cjb@laptop.org>
+---
+ drivers/mmc/card/block.c |  2 +-
+ include/linux/mmc/host.h | 10 ++++++++++
+ 2 files changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/mmc/card/block.c b/drivers/mmc/card/block.c
+index 88a3a68..1d6f716 100644
+--- a/drivers/mmc/card/block.c
++++ b/drivers/mmc/card/block.c
+@@ -1389,7 +1389,7 @@ static int mmc_blk_alloc_parts(struct mmc_card *card, struct mmc_blk_data *md)
+ 	if (!mmc_card_mmc(card))
+ 		return 0;
+ 
+-	if (card->ext_csd.boot_size) {
++	if (card->ext_csd.boot_size && mmc_boot_partition_access(card->host)) {
+ 		ret = mmc_blk_alloc_part(card, md, EXT_CSD_PART_CONFIG_ACC_BOOT0,
+ 					 card->ext_csd.boot_size >> 9,
+ 					 true,
+diff --git a/include/linux/mmc/host.h b/include/linux/mmc/host.h
+index f1de30a..53fdaf2 100644
+--- a/include/linux/mmc/host.h
++++ b/include/linux/mmc/host.h
+@@ -231,6 +231,10 @@ struct mmc_host {
+ #define MMC_CAP_MAX_CURRENT_800	(1 << 29)	/* Host max current limit is 800mA */
+ #define MMC_CAP_CMD23		(1 << 30)	/* CMD23 supported. */
+ 
++	unsigned int		caps2;		/* More host capabilities */
++
++#define MMC_CAP2_BOOTPART_NOACC	(1 << 0)	/* Boot partition no access */
++
+ 	mmc_pm_flag_t		pm_caps;	/* supported pm features */
+ 
+ #ifdef CONFIG_MMC_CLKGATE
+@@ -401,5 +405,11 @@ static inline int mmc_host_cmd23(struct mmc_host *host)
+ {
+ 	return host->caps & MMC_CAP_CMD23;
+ }
++
++static inline int mmc_boot_partition_access(struct mmc_host *host)
++{
++	return !(host->caps2 & MMC_CAP2_BOOTPART_NOACC);
++}
++
+ #endif
+ 
+-- 
+2.5.3
+

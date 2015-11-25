@@ -1,0 +1,25 @@
+From 8213e61becc1af63575a9fce71c9acd249ace44c Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Thu, 21 Nov 2013 08:55:17 +0100
+Subject: [PATCH 171/200] apply home-key pull setting from ntx
+
+---
+ arch/arm/plat-mxc/include/mach/iomux-mx6sl.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/plat-mxc/include/mach/iomux-mx6sl.h b/arch/arm/plat-mxc/include/mach/iomux-mx6sl.h
+index 9e9e9f5..9f6fc23 100644
+--- a/arch/arm/plat-mxc/include/mach/iomux-mx6sl.h
++++ b/arch/arm/plat-mxc/include/mach/iomux-mx6sl.h
+@@ -1604,7 +1604,7 @@
+ #define MX6SL_PAD_KEY_COL0__USDHC1_CD                                         \
+ 		IOMUX_PAD(0x0474, 0x016C, 4, 0x0828, 2, MX6SL_USDHC_PAD_CTRL)
+ #define MX6SL_PAD_KEY_COL0__GPIO_3_24                                         \
+-		IOMUX_PAD(0x0474, 0x016C, 5, 0x0000, 0, NO_PAD_I)
++		IOMUX_PAD(0x0474, 0x016C, 5, 0x0000, 0, MX6SL_KEYPAD_CTRL)
+ #define MX6SL_PAD_KEY_COL0__MSHC_SCLK                                         \
+ 		IOMUX_PAD(0x0474, 0x016C, 6, 0x07E8, 0, NO_PAD_CTRL)
+ #define MX6SL_PAD_KEY_COL0__TPSMP_HDATA_0                                     \
+-- 
+2.5.3
+

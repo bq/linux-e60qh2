@@ -1,0 +1,60 @@
+From f987634f124b7d622616a569624eed6ab04abe41 Mon Sep 17 00:00:00 2001
+From: Dave Martin <dave.martin@linaro.org>
+Date: Thu, 28 Jul 2011 13:29:40 +0000
+Subject: [PATCH 108/200] ARM: 7008/1: alignment: Make SIGBUS sent to userspace
+ POSIXly correct
+
+With the UM_SIGNAL alignment fault mode, no siginfo structure is
+passed to userspace.
+
+POSIX specifies how siginfo_t should be populated for alignment
+faults, so this patch does just that:
+
+  * si_signo = SIGBUS
+  * si_code = BUS_ADRALN
+  * si_addr = misaligned data address at which access was attempted
+
+Signed-off-by: Dave Martin <dave.martin@linaro.org>
+Acked-by: Nicolas Pitre <nicolas.pitre@linaro.org>
+Acked-by: Kirill A. Shutemov <kirill@shutemov.name>
+Reviewed-by: Will Deacon <will.deacon@arm.com>
+Signed-off-by: Russell King <rmk+kernel@arm.linux.org.uk>
+---
+ arch/arm/mm/alignment.c | 14 +++++++++++---
+ 1 file changed, 11 insertions(+), 3 deletions(-)
+
+diff --git a/arch/arm/mm/alignment.c b/arch/arm/mm/alignment.c
+index 8611f5d..4c8a285 100644
+--- a/arch/arm/mm/alignment.c
++++ b/arch/arm/mm/alignment.c
+@@ -22,6 +22,7 @@
+ #include <linux/sched.h>
+ #include <linux/uaccess.h>
+ 
++#include <asm/system.h>
+ #include <asm/unaligned.h>
+ 
+ #include "fault.h"
+@@ -910,9 +911,16 @@ do_alignment(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
+ 	if (ai_usermode & UM_FIXUP)
+ 		goto fixup;
+ 
+-	if (ai_usermode & UM_SIGNAL)
+-		force_sig(SIGBUS, current);
+-	else {
++	if (ai_usermode & UM_SIGNAL) {
++		siginfo_t si;
++
++		si.si_signo = SIGBUS;
++		si.si_errno = 0;
++		si.si_code = BUS_ADRALN;
++		si.si_addr = (void __user *)addr;
++
++		force_sig_info(si.si_signo, &si, current);
++	} else {
+ 		/*
+ 		 * We're about to disable the alignment trap and return to
+ 		 * user space.  But if an interrupt occurs before actually
+-- 
+2.5.3
+

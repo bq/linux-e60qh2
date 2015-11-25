@@ -1,0 +1,45 @@
+From 504e6f886fa6590bd114ebf19ed16b19c46ba749 Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Fri, 8 Nov 2013 21:30:47 +0100
+Subject: [PATCH 154/200] disable reporting of key states during resume
+
+The gpio-keys driver reports the state of all its keys during resume
+and normally the input layer should filter out duplicate events of the
+same state on its own (press when already pressed) but this does not
+seem to work in our case.
+
+As the press of the homebutton nevertheless always triggers the interrupt
+and thus reaches the report-stage as well, we can disable the resume-time
+reporting for our use case, to catch the double-report of the key.
+---
+ drivers/input/keyboard/gpio_keys.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/input/keyboard/gpio_keys.c b/drivers/input/keyboard/gpio_keys.c
+index c766620..484100a 100644
+--- a/drivers/input/keyboard/gpio_keys.c
++++ b/drivers/input/keyboard/gpio_keys.c
+@@ -363,6 +363,8 @@ static irqreturn_t gpio_keys_isr(int irq, void *dev_id)
+ 
+ 	BUG_ON(irq != gpio_to_irq(button->gpio));
+ 
++printk("%s\n", __func__);
++	pm_wakeup_event(bdata->input->dev.parent, 3000);
+ 	bdata->isr_state = (gpio_get_value(button->gpio) ? 1 : 0) ^ button->active_low;
+ 	if (bdata->timer_debounce)
+ 		mod_timer(&bdata->timer,
+@@ -640,9 +642,9 @@ static int gpio_keys_resume(struct device *dev)
+ 			disable_irq_wake(irq);
+ 		}
+ 
+-		gpio_keys_report_event(&ddata->data[i]);
++//		gpio_keys_report_event(&ddata->data[i]);
+ 	}
+-	input_sync(ddata->input);
++//	input_sync(ddata->input);
+ 
+ 	return 0;
+ }
+-- 
+2.5.3
+

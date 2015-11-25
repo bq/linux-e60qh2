@@ -1,0 +1,46 @@
+From 0d6372f1efde9c04f3479ebea8f795dda443851b Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Fri, 13 Dec 2013 17:07:11 +0100
+Subject: [PATCH 187/200] disable re-setting of gpio-direction registers to
+ input which causes wakeups for us
+
+---
+ arch/arm/mach-mx6/mx6sl_ntx_io.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/arch/arm/mach-mx6/mx6sl_ntx_io.c b/arch/arm/mach-mx6/mx6sl_ntx_io.c
+index d0c40d1..13a5f5c 100644
+--- a/arch/arm/mach-mx6/mx6sl_ntx_io.c
++++ b/arch/arm/mach-mx6/mx6sl_ntx_io.c
+@@ -1686,23 +1686,23 @@ void ntx_gpio_suspend (void)
+ 
+ 		base = IO_ADDRESS(GPIO1_BASE_ADDR);
+ 		ntx_gpio_dir[0] = __raw_readl(base+4);
+-		__raw_writel( ntx_gpio_dir[0]&(~0xffffff80), base+4);
++//		__raw_writel( ntx_gpio_dir[0]&(~0xffffff80), base+4);
+ 
+         base = IO_ADDRESS(GPIO2_BASE_ADDR);
+         ntx_gpio_dir[1] = __raw_readl(base+4);
+-        __raw_writel( ntx_gpio_dir[1]&(~0xffffffff), base+4);
++//        __raw_writel( ntx_gpio_dir[1]&(~0xffffffff), base+4);
+ 
+         base = IO_ADDRESS(GPIO3_BASE_ADDR);
+         ntx_gpio_dir[2] = __raw_readl(base+4);
+-        __raw_writel( ntx_gpio_dir[2]&(~0xfffcffff), base+4);
++//        __raw_writel( ntx_gpio_dir[2]&(~0xfffcffff), base+4);
+ 
+         base = IO_ADDRESS(GPIO4_BASE_ADDR);
+         ntx_gpio_dir[3] = __raw_readl(base+4);
+-        __raw_writel( ntx_gpio_dir[3]&(~0xdfffffff), base+4);
++//        __raw_writel( ntx_gpio_dir[3]&(~0xdfffffff), base+4);
+ 
+         base = IO_ADDRESS(GPIO5_BASE_ADDR);
+         ntx_gpio_dir[4] = __raw_readl(base+4);
+-        __raw_writel( ntx_gpio_dir[4]&(~0x003fffff), base+4);
++//        __raw_writel( ntx_gpio_dir[4]&(~0x003fffff), base+4);
+ 	}
+ }
+ 
+-- 
+2.5.3
+

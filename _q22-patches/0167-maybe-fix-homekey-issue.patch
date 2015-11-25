@@ -1,0 +1,68 @@
+From afdee9c56d8d55569baa3ad23fc7dfdf70c9d74c Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Tue, 19 Nov 2013 14:09:13 +0100
+Subject: [PATCH 167/200] maybe fix homekey issue
+
+it seems the home-key-interrupt can happen after the interrupts already
+got disabled when suspending - for whatever reason. This seems to throw
+the system in for a loop, as the interrupt is marked as pending and thus
+lets the system reattempt it all the time - especially during further suspends.
+
+As the lock of the irq is then probably contented this will never get
+resolved, making the system unable to go to suspend anymore - returning a
+"busy" error code.
+
+Try to resolve this in a hacky way by not marking the home-key interrupt as
+pending in this case. It won't get reattempted and it was able to go to sleep
+for me after the original issue happened.
+---
+ kernel/irq/chip.c | 14 +++-----------
+ 1 file changed, 3 insertions(+), 11 deletions(-)
+
+diff --git a/kernel/irq/chip.c b/kernel/irq/chip.c
+index c061ece..b67cfc5 100644
+--- a/kernel/irq/chip.c
++++ b/kernel/irq/chip.c
+@@ -138,11 +138,13 @@ EXPORT_SYMBOL_GPL(irq_get_irq_data);
+ 
+ static void irq_state_clr_disabled(struct irq_desc *desc)
+ {
++if (desc->irq_data.irq == 344) dump_stack();
+ 	irqd_clear(&desc->irq_data, IRQD_IRQ_DISABLED);
+ }
+ 
+ static void irq_state_set_disabled(struct irq_desc *desc)
+ {
++if (desc->irq_data.irq == 344) dump_stack();
+ 	irqd_set(&desc->irq_data, IRQD_IRQ_DISABLED);
+ }
+ 
+@@ -464,6 +466,7 @@ if (irq == 344) printk("disabled %d, in_progress %d, desc-action %d\n", irqd_irq
+ 	if (unlikely(irqd_irq_disabled(&desc->irq_data) ||
+ 		     irqd_irq_inprogress(&desc->irq_data) || !desc->action)) {
+ 		if (!irq_check_poll(desc)) {
++if (irq != 344) // only set other irqs pending, due to the race of the homebutton irq
+ 			desc->istate |= IRQS_PENDING;
+ 			mask_ack_irq(desc);
+ 			goto out_unlock;
+@@ -594,17 +597,6 @@ __irq_set_handler(unsigned int irq, irq_flow_handler_t handle, int is_chained,
+ 	}
+ 	desc->handle_irq = handle;
+ 	desc->name = name;
+-if (irq == 344) {
+-	printk("%s, name %s, handler:", __func__, name);
+-	if(handle == handle_edge_irq)
+-		printk("handle_edge_irq\n");
+-	else if(handle == handle_level_irq) {
+-		printk("handle_level_irq\n");
+-		dump_stack();
+-	}
+-	else
+-		printk("other handler\n");
+-}
+ 
+ 	if (handle != handle_bad_irq && is_chained) {
+ 		irq_settings_set_noprobe(desc);
+-- 
+2.5.3
+

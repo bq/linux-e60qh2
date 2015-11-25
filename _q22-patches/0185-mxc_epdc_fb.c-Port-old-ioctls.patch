@@ -1,0 +1,181 @@
+From 8b35735678067cf74ff44b13add1f0355a6ebe31 Mon Sep 17 00:00:00 2001
+From: Matthias Brugger <matthias.bgg@gmail.com>
+Date: Wed, 11 Dec 2013 16:55:56 +0100
+Subject: [PATCH 185/200] mxc_epdc_fb.c: Port old ioctls
+
+This patch ports the old ioctl numbers from 2.6.35 kernel to our kernel
+version. This way the freescale EPDC unit test works once again.
+---
+ drivers/video/mxc/mxc_epdc_fb.c | 67 +++++++++++++++++++++++++++++++++++++++++
+ include/linux/mxcfb.h           | 29 ++++++++++++++++++
+ 2 files changed, 96 insertions(+)
+
+diff --git a/drivers/video/mxc/mxc_epdc_fb.c b/drivers/video/mxc/mxc_epdc_fb.c
+index 61b56a0..f897b7e 100644
+--- a/drivers/video/mxc/mxc_epdc_fb.c
++++ b/drivers/video/mxc/mxc_epdc_fb.c
+@@ -3739,6 +3739,27 @@ static int mxc_epdc_fb_ioctl(struct fb_info *info, unsigned int cmd,
+ 			}
+ 			break;
+ 		}
++	case MXCFB_SET_WAVEFORM_MODES_OLD:
++		{
++			struct mxcfb_waveform_modes_old modes;
++			struct mxcfb_waveform_modes modes_new;
++			if (!copy_from_user(&modes, argp, sizeof(modes))) {
++				// we copy the modes manually from the old to the new data structure
++				modes_new.mode_init = modes.mode_init;
++				modes_new.mode_du = modes.mode_du;
++				modes_new.mode_gc4 = modes.mode_gc4;
++				modes_new.mode_gc8 = modes.mode_gc8;
++				modes_new.mode_gc16 = modes.mode_gc16;
++				modes_new.mode_gc32 = modes.mode_gc32;
++				modes_new.mode_reagl = 0;
++				modes_new.mode_reagld = 0;
++				modes_new.mode_gl16 = 0;
++				modes_new.mode_a2 = 0;
++				mxc_epdc_fb_set_waveform_modes(&modes_new, info);
++				ret = 0;
++			}
++			break;
++		}
+ 	case MXCFB_SET_TEMPERATURE:GALLEN_DBGLOCAL_RUNLOG(1);
+ 		//printk("\n==>skip MXCFB_SET_TEMPERATURE\n");ret=0;break;															 
+ 		{
+@@ -3782,6 +3803,50 @@ static int mxc_epdc_fb_ioctl(struct fb_info *info, unsigned int cmd,
+ 
+ 			break;
+ 		}
++	case MXCFB_SEND_UPDATE_OLD:
++		//printk("\n==> MXCFB_SEND_UPDATE_OLD\n");
++		{
++			struct mxcfb_update_data_old upd_data_old;
++			struct mxcfb_update_data upd_data;
++			if (!copy_from_user(&upd_data, argp,
++				sizeof(upd_data))) {
++
++				// set upd_data <- upd_data_old
++				memcpy(&upd_data_new.update_region, &upd_data_old.update_region, sizeof(upd_data_old.update_region));
++				upd_data.waveform_mode = upd_data_old.waveform_mode;
++				upd_data.update_mode = upd_data_old.update_mode;
++				upd_data.update_marker = upd_data_old.update_marker;
++				upd_data.temp = upd_data_old.temp;
++				upd_data.flags = upd_data_old.flags;
++				//
++				upd_data.alt_buffer_data.phys_addr = upd_data_old.alt_buffer_data.phys_addr;
++				upd_data.alt_buffer_data.width = upd_data_old.alt_buffer_data.width;
++				upd_data.alt_buffer_data.height = upd_data_old.alt_buffer_data.height;
++				upd_data.alt_buffer_data.alt_update_region = upd_data_old.alt_buffer_data.alt_update_region;
++
++				ret = mxc_epdc_fb_send_update(&upd_data, info);
++
++				// set upd_data_old <- upd_data
++				memcpy(&upd_data_old.update_region, &upd_data.update_region, sizeof(upd_data_old.update_region));
++				upd_data_old.waveform_mode = upd_data.waveform_mode;
++				upd_data_old.update_mode = upd_data.update_mode;
++				upd_data_old.update_marker = upd_data.update_marker;
++				upd_data_old.temp = upd_data.temp;
++				upd_data_old.flags = upd_data.flags;
++				//
++				upd_data_old.alt_buffer_data.phys_addr = upd_data.alt_buffer_data.phys_addr;
++				upd_data_old.alt_buffer_data.width = upd_data.alt_buffer_data.width;
++				upd_data_old.alt_buffer_data.height = upd_data.alt_buffer_data.height;
++				upd_data_old.alt_buffer_data.alt_update_region = upd_data.alt_buffer_data.alt_update_region;
++				if (ret == 0 && copy_to_user(argp, &upd_data_old,
++					sizeof(upd_data_old)))
++					ret = -EFAULT;
++			} else {
++				ret = -EFAULT;
++			}
++
++			break;
++		}
+ 
+ #ifdef MX50_IOCTL_IF//[
+ 	case MXCFB_WAIT_FOR_UPDATE_COMPLETE:GALLEN_DBGLOCAL_RUNLOG(10);
+@@ -3804,6 +3869,7 @@ static int mxc_epdc_fb_ioctl(struct fb_info *info, unsigned int cmd,
+ 		}
+ 																			
+ 	case MXCFB_WAIT_FOR_UPDATE_COMPLETE2:GALLEN_DBGLOCAL_RUNLOG(5);
++	case MXCFB_WAIT_FOR_UPDATE_COMPLETE3:
+ 		printk("\n==> MXCFB_WAIT_FOR_UPDATE_COMPLETE2 mx50\n");
+ #else//][!MX50_IOCTL_IF
+ 	case MXCFB_WAIT_FOR_UPDATE_COMPLETE:GALLEN_DBGLOCAL_RUNLOG(11);
+@@ -3867,6 +3933,7 @@ static int mxc_epdc_fb_ioctl(struct fb_info *info, unsigned int cmd,
+ 
+ 	default:GALLEN_DBGLOCAL_RUNLOG(9);
+ 		//printk("\n==>skip unkown fsl epd command %d\n",cmd);ret=0;break;
++		printk(KERN_ERR"\n==>skip unkown fsl epd command %x - %x %x %x\n",cmd, MXCFB_WAIT_FOR_UPDATE_COMPLETE, MXCFB_WAIT_FOR_UPDATE_COMPLETE2, MXCFB_WAIT_FOR_UPDATE_COMPLETE3);
+ 		ret = k_fake_s1d13522_ioctl(cmd,arg);
+ 		break;
+ 	}
+diff --git a/include/linux/mxcfb.h b/include/linux/mxcfb.h
+index cf93e48..bc735a5 100644
+--- a/include/linux/mxcfb.h
++++ b/include/linux/mxcfb.h
+@@ -108,6 +108,13 @@ struct mxcfb_alt_buffer_data {
+ 	struct mxcfb_rect alt_update_region;	/* region within buffer to update */
+ };
+ 
++struct mxcfb_alt_buffer_data_old {
++	__u32 phys_addr;
++	__u32 width;	/* width of entire buffer */
++	__u32 height;	/* height of entire buffer */
++	struct mxcfb_rect alt_update_region;	/* region within buffer to update */
++};
++
+ struct mxcfb_update_data {
+ 	struct mxcfb_rect update_region;
+ 	__u32 waveform_mode;
+@@ -118,6 +125,16 @@ struct mxcfb_update_data {
+ 	struct mxcfb_alt_buffer_data alt_buffer_data;
+ };
+ 
++struct mxcfb_update_data_old {
++	struct mxcfb_rect update_region;
++	__u32 waveform_mode;
++	__u32 update_mode;
++	__u32 update_marker;
++	int temp;
++	uint flags;
++	struct mxcfb_alt_buffer_data_old alt_buffer_data;
++};
++
+ struct mxcfb_update_marker_data {
+ 	__u32 update_marker;
+ 	__u32 collision_test;
+@@ -141,6 +158,15 @@ struct mxcfb_waveform_modes {
+ 	int mode_a2;
+ };
+ 
++struct mxcfb_waveform_modes_old {
++	int mode_init;
++	int mode_du;
++	int mode_gc4;
++	int mode_gc8;
++	int mode_gc16;
++	int mode_gc32;
++};
++
+ /*
+  * Structure used to define a 5*3 matrix of parameters for
+  * setting IPU DP CSC module related to this framebuffer.
+@@ -165,12 +191,15 @@ struct mxcfb_csc_matrix {
+ 
+ /* IOCTLs for E-ink panel updates */
+ #define MXCFB_SET_WAVEFORM_MODES	_IOW('F', 0x2B, struct mxcfb_waveform_modes)
++#define MXCFB_SET_WAVEFORM_MODES_OLD	_IOW('F', 0x2B, struct mxcfb_waveform_modes_old)
+ #define MXCFB_SET_TEMPERATURE		_IOW('F', 0x2C, int32_t)
+ #define MXCFB_SET_AUTO_UPDATE_MODE	_IOW('F', 0x2D, __u32)
+ #define MXCFB_SEND_UPDATE		_IOW('F', 0x2E, struct mxcfb_update_data)
++#define MXCFB_SEND_UPDATE_OLD		_IOW('F', 0x2E, struct mxcfb_update_data_old)
+ #ifdef MX50_IOCTL_IF//[
+ #define MXCFB_WAIT_FOR_UPDATE_COMPLETE	_IOW('F', 0x2F, __u32)
+ #define MXCFB_WAIT_FOR_UPDATE_COMPLETE2 _IOWR('F', 0x35, struct mxcfb_update_marker_data)
++#define MXCFB_WAIT_FOR_UPDATE_COMPLETE3 _IOWR('F', 0x2F, struct mxcfb_update_marker_data)
+ #else //][!MX50_IOCTL_IF
+ #define MXCFB_WAIT_FOR_UPDATE_COMPLETE _IOWR('F', 0x35, struct mxcfb_update_marker_data)
+ #endif//] MX50_IOCTL_IF
+-- 
+2.5.3
+

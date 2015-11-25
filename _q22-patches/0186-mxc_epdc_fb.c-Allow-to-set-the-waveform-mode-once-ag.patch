@@ -1,0 +1,29 @@
+From aefdcf758a46e1d4819bb9bbe224ab77b8edce32 Mon Sep 17 00:00:00 2001
+From: Matthias Brugger <matthias.bgg@gmail.com>
+Date: Wed, 11 Dec 2013 16:59:16 +0100
+Subject: [PATCH 186/200] mxc_epdc_fb.c: Allow to set the waveform mode once
+ again
+
+This patch reverts parts of commit 90687e88aaeeba9ba7a08ddd68366cad817a5d1f
+---
+ drivers/video/mxc/mxc_epdc_fb.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/video/mxc/mxc_epdc_fb.c b/drivers/video/mxc/mxc_epdc_fb.c
+index f897b7e..9da7e3a 100644
+--- a/drivers/video/mxc/mxc_epdc_fb.c
++++ b/drivers/video/mxc/mxc_epdc_fb.c
+@@ -2008,8 +2008,8 @@ void mxc_epdc_fb_set_waveform_modes(struct mxcfb_waveform_modes *modes,
+ 		(struct mxc_epdc_fb_data *)info:g_fb_data;
+ 
+ 
+-	WARNING_MSG("%s(%d):%s() skip\n",__FILE__,__LINE__,__FUNCTION__);
+-	return ;
++//	WARNING_MSG("%s(%d):%s() skip\n",__FILE__,__LINE__,__FUNCTION__);
++//	return ;
+ 
+ 	mutex_lock(&fb_data->queue_mutex);
+ 
+-- 
+2.5.3
+

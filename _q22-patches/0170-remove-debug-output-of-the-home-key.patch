@@ -1,0 +1,161 @@
+From b99054af03026cfd83e4356aa82ecd3d549ee208 Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Wed, 20 Nov 2013 15:34:59 +0100
+Subject: [PATCH 170/200] remove debug output of the home key
+
+---
+ arch/arm/plat-mxc/gpio.c | 20 --------------------
+ kernel/irq/chip.c        |  4 ----
+ kernel/irq/handle.c      |  9 ---------
+ 3 files changed, 33 deletions(-)
+
+diff --git a/arch/arm/plat-mxc/gpio.c b/arch/arm/plat-mxc/gpio.c
+index e92f0d9..c06133d 100644
+--- a/arch/arm/plat-mxc/gpio.c
++++ b/arch/arm/plat-mxc/gpio.c
+@@ -67,31 +67,23 @@ static void _set_gpio_irqenable(struct mxc_gpio_port *port, u32 index,
+ static void gpio_ack_irq(struct irq_data *d)
+ {
+ 	u32 gpio = irq_to_gpio(d->irq);
+-if (d->irq == 344) printk("irq-debug: %s\n", __func__);
+ 	_clear_gpio_irqstatus(&mxc_gpio_ports[gpio / 32], gpio & 0x1f);
+-if (d->irq == 344) printk("irq-debug: %s done\n", __func__);
+ }
+ 
+ static void gpio_mask_irq(struct irq_data *d)
+ {
+ 	u32 gpio = irq_to_gpio(d->irq);
+-if (d->irq == 344) printk("irq-debug: %s\n", __func__);
+ 	_set_gpio_irqenable(&mxc_gpio_ports[gpio / 32], gpio & 0x1f, 0);
+-if (d->irq == 344) printk("irq-debug: %s done\n", __func__);
+ }
+ 
+ static void gpio_unmask_irq(struct irq_data *d)
+ {
+ 	u32 gpio = irq_to_gpio(d->irq);
+-if (d->irq == 344) printk("irq-debug: %s\n", __func__);
+ 	_set_gpio_irqenable(&mxc_gpio_ports[gpio / 32], gpio & 0x1f, 1);
+-if (d->irq == 344) printk("irq-debug: %s done\n", __func__);
+ }
+ 
+ static int mxc_gpio_get(struct gpio_chip *chip, unsigned offset);
+ 
+-static int home_is_set;
+-
+ static int gpio_set_irq_type(struct irq_data *d, u32 type)
+ {
+ 	u32 gpio = irq_to_gpio(d->irq);
+@@ -100,7 +92,6 @@ static int gpio_set_irq_type(struct irq_data *d, u32 type)
+ 	int edge;
+ 	void __iomem *reg = port->base;
+ 
+-if (d->irq == 344) printk("irq-debug: %s\n", __func__);
+ 	port->both_edges &= ~(1 << (gpio & 31));
+ 	switch (type) {
+ 	case IRQ_TYPE_EDGE_RISING:
+@@ -130,16 +121,10 @@ if (d->irq == 344) printk("irq-debug: %s\n", __func__);
+ 		return -EINVAL;
+ 	}
+ 
+-//if (d->irq != 344) {
+-	/* set the correct irq handler */
+ 	if (type & (IRQ_TYPE_LEVEL_LOW | IRQ_TYPE_LEVEL_HIGH))
+ 		irq_set_handler(d->irq, handle_level_irq);
+ 	else if (type & IRQ_TYPE_EDGE_BOTH)
+ 		irq_set_handler(d->irq, handle_edge_irq);
+-/*} else if (!home_is_set) {
+-	irq_set_handler(d->irq, handle_edge_irq);
+-	home_is_set = 1;
+-}*/
+ 
+ 	reg += GPIO_ICR1 + ((gpio & 0x10) >> 2); /* lower or upper register */
+ 	bit = gpio & 0xf;
+@@ -147,7 +132,6 @@ if (d->irq == 344) printk("irq-debug: %s\n", __func__);
+ 	__raw_writel(val | (edge << (bit << 1)), reg);
+ 	_clear_gpio_irqstatus(port, gpio & 0x1f);
+ 
+-if (d->irq == 344) printk("irq-debug: %s done\n", __func__);
+ 	return 0;
+ }
+ 
+@@ -181,10 +165,8 @@ static void mxc_gpio_irq_handler(struct mxc_gpio_port *port, u32 irq_stat)
+ {
+ 	u32 gpio_irq_no_base = port->virtual_irq_start;
+ 
+-if (gpio_irq_no_base >= 320 && gpio_irq_no_base <= 350) printk("%s, %lu\n", __func__, gpio_irq_no_base);
+ 	while (irq_stat != 0) {
+ 		int irqoffset = fls(irq_stat) - 1;
+-if (gpio_irq_no_base + irqoffset == 344) printk("irq-debug: %s home found\n", __func__);
+ 
+ 		if (port->both_edges & (1 << irqoffset))
+ 			mxc_flip_edge(port, irqoffset);
+@@ -192,9 +174,7 @@ if (gpio_irq_no_base + irqoffset == 344) printk("irq-debug: %s home found\n", __
+ 		generic_handle_irq(gpio_irq_no_base + irqoffset);
+ 
+ 		irq_stat &= ~(1 << irqoffset);
+-if (gpio_irq_no_base + irqoffset == 344) printk("irq-debug: %s home found done\n", __func__);
+ 	}
+-if (gpio_irq_no_base >= 320 && gpio_irq_no_base <= 350) printk("%s done\n", __func__);
+ }
+ 
+ /* MX1 and MX3 has one interrupt *per* gpio port */
+diff --git a/kernel/irq/chip.c b/kernel/irq/chip.c
+index b67cfc5..990965e 100644
+--- a/kernel/irq/chip.c
++++ b/kernel/irq/chip.c
+@@ -138,13 +138,11 @@ EXPORT_SYMBOL_GPL(irq_get_irq_data);
+ 
+ static void irq_state_clr_disabled(struct irq_desc *desc)
+ {
+-if (desc->irq_data.irq == 344) dump_stack();
+ 	irqd_clear(&desc->irq_data, IRQD_IRQ_DISABLED);
+ }
+ 
+ static void irq_state_set_disabled(struct irq_desc *desc)
+ {
+-if (desc->irq_data.irq == 344) dump_stack();
+ 	irqd_set(&desc->irq_data, IRQD_IRQ_DISABLED);
+ }
+ 
+@@ -462,11 +460,9 @@ handle_edge_irq(unsigned int irq, struct irq_desc *desc)
+ 	 * we shouldn't process the IRQ. Mark it pending, handle
+ 	 * the necessary masking and go out
+ 	 */
+-if (irq == 344) printk("disabled %d, in_progress %d, desc-action %d\n", irqd_irq_disabled(&desc->irq_data), irqd_irq_inprogress(&desc->irq_data), !!desc->action);
+ 	if (unlikely(irqd_irq_disabled(&desc->irq_data) ||
+ 		     irqd_irq_inprogress(&desc->irq_data) || !desc->action)) {
+ 		if (!irq_check_poll(desc)) {
+-if (irq != 344) // only set other irqs pending, due to the race of the homebutton irq
+ 			desc->istate |= IRQS_PENDING;
+ 			mask_ack_irq(desc);
+ 			goto out_unlock;
+diff --git a/kernel/irq/handle.c b/kernel/irq/handle.c
+index a0b58d0..470d08c 100644
+--- a/kernel/irq/handle.c
++++ b/kernel/irq/handle.c
+@@ -169,22 +169,13 @@ irqreturn_t handle_irq_event(struct irq_desc *desc)
+ 	struct irqaction *action = desc->action;
+ 	irqreturn_t ret;
+ 
+-if(desc->irq_data.irq == 344) printk("%s", __func__);
+ 	desc->istate &= ~IRQS_PENDING;
+ 	irqd_set(&desc->irq_data, IRQD_IRQ_INPROGRESS);
+ 	raw_spin_unlock(&desc->lock);
+ 
+ 	ret = handle_irq_event_percpu(desc, action);
+ 
+-if (desc->irq_data.irq == 344) printk("%s before lock", __func__);
+-/*if (desc->irq_data.irq == 344 && raw_spin_is_locked(&desc->lock)) {
+-	printk("!!! home-key irq-lock is already locked...\n");
+-	irqd_clear(&desc->irq_data, IRQD_IRQ_INPROGRESS);
+-	return ret;
+-}*/
+-
+ 	raw_spin_lock(&desc->lock);
+ 	irqd_clear(&desc->irq_data, IRQD_IRQ_INPROGRESS);
+-if(desc->irq_data.irq == 344) printk("... done\n");
+ 	return ret;
+ }
+-- 
+2.5.3
+

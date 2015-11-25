@@ -1,0 +1,41 @@
+From fd3d6862df9e43f206c828fb14765d9649c70ff7 Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Tue, 22 Oct 2013 23:45:44 +0200
+Subject: [PATCH 135/200] reenable MXC_ELCDIF driver and redisable
+ epdc_init_settings
+
+This seems to fix the hang issues.
+---
+ .config                         | 2 +-
+ drivers/video/mxc/mxc_epdc_fb.c | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/.config b/.config
+index 6f64a74..b5e9364 100644
+--- a/.config
++++ b/.config
+@@ -1365,7 +1365,7 @@ CONFIG_FB_MXC=y
+ CONFIG_FB_MXC_EINK_PANEL=y
+ # CONFIG_FB_MXC_EINK_AUTO_UPDATE_MODE is not set
+ # CONFIG_FB_MXC_SIPIX_PANEL is not set
+-# CONFIG_FB_MXC_ELCDIF_FB is not set
++CONFIG_FB_MXC_ELCDIF_FB=y
+ 
+ #
+ # Console display driver support
+diff --git a/drivers/video/mxc/mxc_epdc_fb.c b/drivers/video/mxc/mxc_epdc_fb.c
+index 4e1b93f..61b56a0 100644
+--- a/drivers/video/mxc/mxc_epdc_fb.c
++++ b/drivers/video/mxc/mxc_epdc_fb.c
+@@ -6209,7 +6209,7 @@ static int mxc_epdc_fb_resume(struct platform_device *pdev)
+ 	mxc_epdc_fb_blank(FB_BLANK_UNBLANK, &data->info);
+ #endif//] EPD_SUSPEND_BLANK
+ 
+-	epdc_init_settings(data);
++	//epdc_init_settings(data);
+ 	
+ 	data->updates_active = false;
+ 
+-- 
+2.5.3
+

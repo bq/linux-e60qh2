@@ -1,0 +1,46 @@
+From 7b9ec586e5e299082cf7d7a08cd61cb4c394c16a Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Tue, 7 Jan 2014 15:03:11 +0100
+Subject: [PATCH 195/200] lk_tps65185: fix mismatch between disabling and
+ enabling irqs during suspend
+
+If an error happened in the suspend function (pwrdwn work pending) the
+irqs where wrongly reenabled in every case, even if the regulator
+had only entered the standby mode without disabling them.
+
+This mismatch caused of course irq errors.
+---
+ drivers/video/mxc/lk_tps65185.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/video/mxc/lk_tps65185.c b/drivers/video/mxc/lk_tps65185.c
+index b6b074d..8ab79da 100644
+--- a/drivers/video/mxc/lk_tps65185.c
++++ b/drivers/video/mxc/lk_tps65185.c
+@@ -720,8 +720,11 @@ exit:
+ 
+ static void tps65185_pwrdwn_work_func(struct work_struct *work)
+ {
++printk("%s: waiting for chmod_lock ...", __func__);
+ 	down(&gtTPS65185_DataA[0].chmod_lock);
++printk("ok\n");
+ 	_tps65185_pwrdwn();
++printk("%s: pwrdwn finished\n", __func__);
+ 	up(&gtTPS65185_DataA[0].chmod_lock);
+ }
+ 
+@@ -2088,7 +2091,10 @@ int tps65185_suspend(void)
+ 	if(delayed_work_pending(&gtPwrdwn_work_param.pwrdwn_work)) {
+ 		WARNING_MSG("pmic pwrdwn delay work pending !!\n");
+ 		//flush_delayed_work(&gtPwrdwn_work_param.pwrdwn_work);
+-		tps65185_irqs_enable(1);
++
++		if (gSleep_Mode_Suspend)
++			tps65185_irqs_enable(1);
++
+ 		return -1;
+ 	}
+ 
+-- 
+2.5.3
+

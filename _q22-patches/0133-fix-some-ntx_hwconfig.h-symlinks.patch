@@ -1,0 +1,47 @@
+From ecb1197d6bed388d30afa4909b6366631ec4b171 Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Tue, 8 Oct 2013 17:19:15 +0200
+Subject: [PATCH 133/200] fix some ntx_hwconfig.h symlinks
+
+---
+ drivers/input/keyboard/ntx_hwconfig.h | 2 +-
+ drivers/video/mxc/ntx_hwconfig.h      | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+ mode change 100644 => 120000 drivers/input/keyboard/ntx_hwconfig.h
+ mode change 100644 => 120000 drivers/video/mxc/ntx_hwconfig.h
+
+diff --git a/drivers/input/keyboard/ntx_hwconfig.h b/drivers/input/keyboard/ntx_hwconfig.h
+deleted file mode 100644
+index cdd55fb..0000000
+--- a/drivers/input/keyboard/ntx_hwconfig.h
++++ /dev/null
+@@ -1 +0,0 @@
+-link ../../../arch/arm/mach-mx6/ntx_hwconfig.h
+\ No newline at end of file
+diff --git a/drivers/input/keyboard/ntx_hwconfig.h b/drivers/input/keyboard/ntx_hwconfig.h
+new file mode 120000
+index 0000000..cf82769
+--- /dev/null
++++ b/drivers/input/keyboard/ntx_hwconfig.h
+@@ -0,0 +1 @@
++../../../arch/arm/mach-mx6/ntx_hwconfig.h
+\ No newline at end of file
+diff --git a/drivers/video/mxc/ntx_hwconfig.h b/drivers/video/mxc/ntx_hwconfig.h
+deleted file mode 100644
+index cdd55fb..0000000
+--- a/drivers/video/mxc/ntx_hwconfig.h
++++ /dev/null
+@@ -1 +0,0 @@
+-link ../../../arch/arm/mach-mx6/ntx_hwconfig.h
+\ No newline at end of file
+diff --git a/drivers/video/mxc/ntx_hwconfig.h b/drivers/video/mxc/ntx_hwconfig.h
+new file mode 120000
+index 0000000..cf82769
+--- /dev/null
++++ b/drivers/video/mxc/ntx_hwconfig.h
+@@ -0,0 +1 @@
++../../../arch/arm/mach-mx6/ntx_hwconfig.h
+\ No newline at end of file
+-- 
+2.5.3
+

@@ -1,0 +1,42 @@
+From b0a66aeceb938c0bac797eae03b3e04d565ab642 Mon Sep 17 00:00:00 2001
+From: Heiko Stuebner <heiko@sntech.de>
+Date: Mon, 18 Nov 2013 11:42:59 +0100
+Subject: [PATCH 165/200] more irq debug
+
+---
+ kernel/irq/chip.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/kernel/irq/chip.c b/kernel/irq/chip.c
+index 990965e..21564f9 100644
+--- a/kernel/irq/chip.c
++++ b/kernel/irq/chip.c
+@@ -345,6 +345,7 @@ static void cond_unmask_irq(struct irq_desc *desc)
+ void
+ handle_level_irq(unsigned int irq, struct irq_desc *desc)
+ {
++if(irq == 344) printk("home in %s\n", __func__);
+ 	raw_spin_lock(&desc->lock);
+ 	mask_ack_irq(desc);
+ 
+@@ -593,6 +594,17 @@ __irq_set_handler(unsigned int irq, irq_flow_handler_t handle, int is_chained,
+ 	}
+ 	desc->handle_irq = handle;
+ 	desc->name = name;
++if (irq == 344) {
++	printk("%s, name %s, handler:", __func__, name);
++	if(handle == handle_edge_irq)
++		printk("handle_edge_irq\n");
++	else if(handle == handle_level_irq) {
++		printk("handle_level_irq\n");
++		dump_stack();
++	}
++	else
++		printk("other handler\n");
++}
+ 
+ 	if (handle != handle_bad_irq && is_chained) {
+ 		irq_settings_set_noprobe(desc);
+-- 
+2.5.3
+

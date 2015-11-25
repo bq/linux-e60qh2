@@ -1,0 +1,73 @@
+From 6bffcfa022d62b52a97edfb6e5c3eece3f661b5e Mon Sep 17 00:00:00 2001
+From: Matthias Brugger <matthias.brugger@bqreaders.com>
+Date: Wed, 30 Oct 2013 13:10:00 +0100
+Subject: [PATCH 141/200] drivers/misc/ntx-misc.c wait on EBUSY
+
+When recieving -EBUSY after sending i2c message to MPS430,
+we will try to resend the message up to 10 times.
+---
+ drivers/misc/ntx-misc.c | 26 +++++++++++++++++++++++---
+ 1 file changed, 23 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/misc/ntx-misc.c b/drivers/misc/ntx-misc.c
+index 09b5423..d55920c 100644
+--- a/drivers/misc/ntx-misc.c
++++ b/drivers/misc/ntx-misc.c
+@@ -51,15 +51,25 @@ struct i2c_client *g_up_i2c_client;
+ extern int g_wakeup_by_alarm;
+ static struct ntx_up_dev_info *gNtxUpDevInfo;
+ 
++#define MAX_I2C_RETRY	10
++
+ int up_read_reg(unsigned char reg)
+ {
+ 	unsigned char buffer[10];
++	int ret, retry = 0;
+ 	struct i2c_msg msg[] = 
+ 	{
+ 		{.addr = g_up_i2c_client->addr, .flags = 0, .len = 1, .buf = &reg,}, 
+ 		{.addr = g_up_i2c_client->addr, .flags = I2C_M_RD, .len = 2, .buf = buffer,},
+ 	};
+-	if(0 > i2c_transfer(g_up_i2c_client->adapter, msg, 2))
++
++	do {
++		ret = i2c_transfer(g_up_i2c_client->adapter, msg, 2);
++		msleep(10);
++		retry++;
++	} while (ret == -EBUSY && retry < MAX_I2C_RETRY);
++
++	if(0 > ret)
+ 		printk ("[%s-%d] i2c_transfer failed...\n", __func__, __LINE__);
+ 	
+ 	return ((buffer[0]<<8) | buffer[1]);
+@@ -68,6 +78,7 @@ int up_read_reg(unsigned char reg)
+ int up_write_reg(unsigned char reg, int value)
+ {
+ 	unsigned char buffer[10];
++	int ret, retry = 0;
+ 	struct i2c_msg msg[] = 
+ 	{
+ 		{.addr = g_up_i2c_client->addr, .flags = 0, .len = 3, .buf = buffer,}, 
+@@ -75,8 +86,17 @@ int up_write_reg(unsigned char reg, int value)
+ 	buffer[0] = reg;
+ 	buffer[1] = value >> 8;
+ 	buffer[2] = value & 0xFF;
+-	
+-	return i2c_transfer(g_up_i2c_client->adapter, msg, 1);
++
++	do {
++		ret = i2c_transfer(g_up_i2c_client->adapter, msg, 1);
++		msleep(10);
++		retry++;
++	} while (ret == -EBUSY && retry < MAX_I2C_RETRY);
++
++	if(ret < 0)
++		printk ("[%s-%d] i2c_transfer failed...\n", __func__, __LINE__);
++
++	return ret;
+ }
+ 
+ 
+-- 
+2.5.3
+
