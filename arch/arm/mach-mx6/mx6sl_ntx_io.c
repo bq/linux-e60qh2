@@ -1266,6 +1266,7 @@ static int  ioctlDriver(struct file *filp, unsigned int command, unsigned long a
 				fl_lm3630a_percentage (p);
 			else
 				fl_set_percentage(p);
+			last_FL_set = p;
 			break;
 
 		case CM_FRONT_LIGHT_TABLE:
@@ -1334,7 +1335,6 @@ printk("front light sleep %d\n", p);
 					schedule_delayed_work(&FL_off, 120);
 				}
 				last_FL_duty = p;
-				last_FL_set = p;
 			}
 			break;
 
