@@ -1316,24 +1316,17 @@ printk("front light sleep %d\n", p);
 						cancel_delayed_work_sync(&FL_off);
 					}
 					if (0 == last_FL_duty){
-						ret = up_write_reg (0xA1, 0xFF00);
-						if (ret < 0)
-							return -EINVAL;
-						ret = up_write_reg (0xA2, 0xFF00);
-						if (ret < 0)
-							return -EINVAL;
-						ret = up_write_reg (0xA3, 0x0100);
-						if (ret < 0)
-							return -EINVAL;
+						msp430_fl_endtime(0xffff); // Disable front light auto off timer .
+						msp430_fl_enable(1);
 
 						msleep(100);
 						gpio_direction_output(MX6SL_FL_EN,0);
 					}
 				}
 				else if(last_FL_duty != 0){
-					ret = up_write_reg(0xA3, 0); 
-					if (ret < 0)
-						return -EINVAL;
+					printk ("turn off front light\n");
+					msp430_fl_enable (0);
+					FL_module_off();
 					schedule_delayed_work(&FL_off, 120);
 				}
 				last_FL_duty = p;
