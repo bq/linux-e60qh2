@@ -51,7 +51,7 @@ void *wifi_get_country_code(char *ccode);
 // change for ntx wifi power control, frank lee 20130510 {
 //int wifi_set_power(int on, unsigned long msec) { return -1; }
 extern void ntx_wifi_power_ctrl (int isWifiEnable);
-int wifi_set_power(int on, unsigned long msec) { ntx_wifi_power_ctrl( on); return 0;};
+int wifi_set_power(int on, unsigned long msec) { /* ntx_wifi_power_ctrl( on); */ return 0;};
 // change for ntx wifi power control, frank lee 20130510 }
 int wifi_get_irq_number(unsigned long *irq_flags_ptr) { return -1; }
 int wifi_get_mac_addr(unsigned char *buf) { return -1; }

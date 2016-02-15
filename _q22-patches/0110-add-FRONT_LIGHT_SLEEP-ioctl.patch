@@ -16,9 +16,9 @@ index 0f5795d..c8094f2 100644
  #define CM_FRONT_LIGHT_DUTY		243
  #define CM_FRONT_LIGHT_FREQUENCY	244
 +#define CM_FRONT_LIGHT_SLEEP		245
- 
- #define CM_POWER_KEY_RAW		250
- 
+ #define CM_FRONT_LIGHT_R_EN		246
+ #define CM_FRONT_LIGHT_HT68F20_SETDUTY	247
+ #define CM_FRONT_LIGHT_GETDUTY		248
 @@ -478,6 +479,7 @@ static int  ioctlDriver(struct file *filp, unsigned int command, unsigned long a
  	static unsigned int  last_FL_duty = 0;
  	static unsigned int  current_FL_freq = 0xFFFF;
