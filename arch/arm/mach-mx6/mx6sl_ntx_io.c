@@ -1062,7 +1062,12 @@ static int  ioctlDriver(struct file *filp, unsigned int command, unsigned long a
 			break;
 		case CM_nLED:
 			//printk("CM_nLED %d\n",p);
-			led_green(p?0:1);
+			if (!p) {
+				g_Cus_Ctrl_Led = 1;
+				led_green(1);
+			} else
+				led_green(0);
+
 			break;			
 			
 		case CM_nLED_CPU:
