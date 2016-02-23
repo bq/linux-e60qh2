@@ -4583,7 +4583,8 @@ static irqreturn_t charger_in_isr(int irq, void *battery_info)
 	printk(KERN_INFO "PMU:%s\n", __func__);
 
 	info->chg_stat1 |= 0x01;
-	queue_work(info->workqueue, &info->irq_work);
+	if (!work_busy(&info->irq_work))
+		queue_work(info->workqueue, &info->irq_work);
 	return IRQ_HANDLED;
 }
 
@@ -4593,7 +4594,8 @@ static irqreturn_t charger_complete_isr(int irq, void *battery_info)
 	printk(KERN_INFO "PMU:%s\n", __func__);
 
 	info->chg_stat1 |= 0x02;
-	queue_work(info->workqueue, &info->irq_work);
+	if (!work_busy(&info->irq_work))
+		queue_work(info->workqueue, &info->irq_work);
 
 	return IRQ_HANDLED;
 }
@@ -4605,7 +4607,8 @@ static irqreturn_t charger_usb_isr(int irq, void *battery_info)
 
 	info->chg_ctr |= 0x02;
 	
-	queue_work(info->workqueue, &info->irq_work);
+	if (!work_busy(&info->irq_work))
+		queue_work(info->workqueue, &info->irq_work);
 
 	info->soca->dischg_state = 0;
 	info->soca->chg_count = 0;
@@ -4622,7 +4625,8 @@ static irqreturn_t charger_adp_isr(int irq, void *battery_info)
 	printk(KERN_INFO "PMU:%s\n", __func__);
 
 	info->chg_ctr |= 0x01;
-	queue_work(info->workqueue, &info->irq_work);
+	if (!work_busy(&info->irq_work))
+		queue_work(info->workqueue, &info->irq_work);
 
 	info->soca->dischg_state = 0;
 	info->soca->chg_count = 0;
