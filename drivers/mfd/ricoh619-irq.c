@@ -419,7 +419,7 @@ static irqreturn_t ricoh61x_irq(int irq, void *data)
 		}
 		
 		/* Mask Charger Interrupt */
-		if (main_int_type[i] & CHG_INT) {
+/*		if (main_int_type[i] & CHG_INT) {
 			if (int_sts[i])
 				ret = ricoh61x_write(ricoh61x->dev,
 							irq_en_add[i], 0xff);
@@ -428,7 +428,7 @@ static irqreturn_t ricoh61x_irq(int irq, void *data)
 						"Error in write reg 0x%02x error: %d\n",
 							irq_en_add[i], ret);
 				}
-		}
+		} */
 		/* Mask ADC Interrupt */
 		if (main_int_type[i] & ADC_INT) {
 			if (int_sts[i])
