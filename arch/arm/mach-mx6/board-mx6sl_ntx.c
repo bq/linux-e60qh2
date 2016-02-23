@@ -172,6 +172,16 @@ static int _MYINIT_TEXT hwcfg_p_setup(char *str)
 			return 0;
 		}
 	}
+
+	/* forcefully enable the progress-bar */
+	gptHWCFG->m_val.bProgressCnts = 7;
+
+	//we want startX = 0x34c, startY = 0x55e
+	gptHWCFG->m_val.bProgressXHiByte = 0x03;
+	gptHWCFG->m_val.bProgressXLoByte = 0x4c;
+	gptHWCFG->m_val.bProgressYHiByte = 0x05;
+	gptHWCFG->m_val.bProgressYLoByte = 0x5e;
+
 	printk("%s() hwcfg_p=%p,vaddr=%p,size=%d,pcb=0x%x\n",__FUNCTION__,
 		gpbHWCFG_paddr,gptHWCFG,(int)gdwHWCFG_size,gptHWCFG->m_val.bPCB);
 	gIsCustomerUi = (int)gptHWCFG->m_val.bUIStyle;
