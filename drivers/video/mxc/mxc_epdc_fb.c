@@ -1404,6 +1404,8 @@ static void epdc_powerup(struct mxc_epdc_fb_data *fb_data)
 
 	mutex_lock(&fb_data->power_mutex);
 
+	gdwLastUpdateJiffies = 0;
+
 	/*
 	 * If power down request is pending, clear
 	 * powering_down to cancel the request.
@@ -4637,6 +4639,7 @@ static int mxc_epdc_fb_open (struct fb_info *info, int user)
 	GALLEN_DBGLOCAL_BEGIN();
 	fake_s1d13522_progress_stop();
 	k_fake_s1d13522_wait_inited();
+	gdwLastUpdateJiffies = 0;
 	GALLEN_DBGLOCAL_END();
 	return 0;
 }
@@ -4817,6 +4820,8 @@ static int mxc_epdc_fb_ioctl(struct fb_info *info, unsigned int cmd,
 		ret = k_fake_s1d13522_ioctl(cmd,arg);
 		break;
 	}
+
+	k_set_temperature(info);
 
 	GALLEN_DBGLOCAL_END();
 	return ret;
