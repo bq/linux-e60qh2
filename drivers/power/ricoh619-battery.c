@@ -4307,6 +4307,7 @@ static void charger_irq_work(struct work_struct *work)
 	//uint8_t adp_current_val = 0x0E;
 	//uint8_t usb_current_val = 0x04;
 	extern void led_red(int isOn);
+	int chg_stat1 = info->chg_stat1;
 	
 	printk(KERN_INFO "PMU:%s In\n", __func__);
 
@@ -4421,7 +4422,9 @@ static void charger_irq_work(struct work_struct *work)
 
 		_config_ricoh619_charger_params(info->dev,giRICOH619_DCIN);
 
-		if(mxc_misc_report_usb) {
+		/* don't do that on charge complete */
+		if(mxc_misc_report_usb && !(chg_stat1 & 0x02)) {
+			pr_info("PMU:%s reporting plug event\n", __func__);
 			mxc_misc_report_usb(giRICOH619_DCIN?1:0);
 		}
 	}
