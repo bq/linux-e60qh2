@@ -670,14 +670,14 @@ static int gpio_keys_suspend(struct device *dev)
 			struct gpio_keys_button *button = &pdata->buttons[i];
 			if (button->wakeup) {
 				int irq = gpio_to_irq(button->gpio);
-				if (gSleep_Mode_Suspend && (KEY_POWER != button->code)) {
+/*				if (gSleep_Mode_Suspend && (KEY_POWER != button->code)) {
 					free_irq(irq, &ddata->data[i]);
 					if (ddata->data[i].timer_debounce)
 						del_timer_sync(&ddata->data[i].timer);
 					cancel_work_sync(&ddata->data[i].work);
 					gpio_free(pdata->buttons[i].gpio);
 					continue;
-				}
+				} */
 				enable_irq_wake(irq);
 			}
 		}
@@ -699,10 +699,10 @@ static int gpio_keys_resume(struct device *dev)
 		struct gpio_button_data *bdata = &ddata->data[i];
 		if (button->wakeup && device_may_wakeup(&pdev->dev)) {
 			int irq = gpio_to_irq(button->gpio);
-			if (gSleep_Mode_Suspend && (KEY_POWER != button->code)) {
+/*			if (gSleep_Mode_Suspend && (KEY_POWER != button->code)) {
 				gpio_keys_setup_key(pdev, bdata, button);
 				continue;
-			}
+			} */
 			disable_irq_wake(irq);
 		}
 
